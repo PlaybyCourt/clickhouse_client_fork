@@ -1,4 +1,66 @@
+stages:
+  - test
+  - deploy
+
+workflow:
+  rules:
+    # For merge requests, create a pipeline.
+    - if: '$CI_MERGE_REQUEST_IID'
+    # For `master` branch, create a pipeline (this includes on schedules, pushes, merges, etc.).
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    # For tags, create a pipeline.
+    - if: '$CI_COMMIT_TAG'
+
+default:
+  tags:
+    - gitlab-org
+  cache:
+    key:
+      files:
+        - Gemfile
+        - click_house-client.gemspec
+    paths:
+      - vendor/ruby
+
+.default-test-job:
+  image: "${GITLAB_DEPENDENCY_PROXY}ruby:${RUBY_VERSION}"
+  stage: test
+  needs: []
+  before_script:
+    - gem install bundler
+    - bundle install -j $(nproc) --path vendor
+  parallel:
+    matrix:
+      - RUBY_VERSION: ['3.0', '3.1', '3.2', '3.3']
+
+test:rspec:
+  extends: .default-test-job
+  script:
+    - bundle exec rspec
+
+test:rubocop:
+  extends: .default-test-job
+  script:
+    - bundle exec rubocop -P -E .
+
 include:
-  - local: gems/gem.gitlab-ci.yml
-    inputs:
-      gem_name: "click_house-client"
+  - component: gitlab.com/components/sast/sast@~latest
+  - component: gitlab.com/components/secret-detection/secret-detection@~latest
+  - template: Security/Dependency-Scanning.gitlab-ci.yml
+
+# run security jobs on MRs
+# see: https://gitlab.com/gitlab-org/gitlab/-/issues/218444#note_478761991
+
+gemnasium-dependency_scanning:
+  rules:
+    - if: '$CI_MERGE_REQUEST_IID'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+secret_detection:
+  variables:
+    # Use a different scanning mode that doesn't rely on commit comparison
+    SECURE_ANALYZERS_MODE: "full_repository_scan"
+
+  rules:
+    - if: '$CI_MERGE_REQUEST_IID'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
