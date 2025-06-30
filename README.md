@@ -52,3 +52,11 @@ puts ClickHouse::Client.select(query, :main)
 puts ClickHouse::Client.execute('CREATE TABLE IF NOT EXISTS t1 (id Int64) ENGINE=MergeTree PRIMARY KEY id', :main)
 puts ClickHouse::Client.execute('DROP TABLE IF EXISTS t1', :main)
 ```
+
+## License
+
+The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
+
+## Code of Conduct
+
+Everyone interacting in the Gitlab::Danger project's codebases, issue trackers, chat rooms and mailing lists is expected to follow the [code of conduct](https://gitlab.com/gitlab-org/ruby/gems/clickhouse-client/blob/master/CODE_OF_CONDUCT.md).
