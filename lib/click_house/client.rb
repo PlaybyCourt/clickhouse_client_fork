@@ -4,6 +4,7 @@ require 'addressable'
 require 'json'
 require 'active_support/time'
 require 'active_support/notifications'
+require 'active_support/core_ext/object/blank'
 require_relative "client/database"
 require_relative "client/configuration"
 require_relative "client/bind_index_manager"
@@ -92,7 +93,7 @@ module ClickHouse
       return unless headers['x-clickhouse-summary']
 
       instrument[:statistics] =
-        Gitlab::Json.parse(headers['x-clickhouse-summary']).symbolize_keys
+        configuration.json_parser.parse(headers['x-clickhouse-summary']).symbolize_keys
     end
 
     private_class_method def self.lookup_database(configuration, database)
