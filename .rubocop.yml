@@ -1,2 +1,14 @@
-inherit_from:
-  - ../config/rubocop.yml
+inherit_gem:
+  gitlab-styles:
+    - rubocop-default.yml
+
+CodeReuse/ActiveRecord:
+  Enabled: false
+
+AllCops:
+  TargetRubyVersion: 3.0
+  NewCops: enable
+  SuggestExtensions: false
+
+RSpec/MultipleMemoizedHelpers:
+  Max: 10

@@ -30,11 +30,11 @@ RSpec.describe ClickHouse::Client do
 
     let(:configuration) do
       ClickHouse::Client::Configuration.new.tap do |config|
-        config.log_proc = ->(query) do
+        config.log_proc = lambda { |query|
           { query_string: query.to_sql }
-        end
+        }
         config.register_database(:test_db, **database_config)
-        config.http_post_proc = ->(_url, _headers, _query) {
+        config.http_post_proc = lambda { |_url, _headers, _query|
           body = File.read(query_result_fixture)
           ClickHouse::Client::Response.new(body, 200)
         }
@@ -85,7 +85,7 @@ RSpec.describe ClickHouse::Client do
       let(:configuration) do
         ClickHouse::Client::Configuration.new.tap do |config|
           config.register_database(:test_db, **database_config)
-          config.http_post_proc = ->(_url, _headers, _query) {
+          config.http_post_proc = lambda { |_url, _headers, _query|
             ClickHouse::Client::Response.new('some error', 404)
           }
         end
@@ -147,13 +147,13 @@ RSpec.describe ClickHouse::Client do
         end
       end
 
-      context 'when query is a string' do # rubocop:disable RSpec/MultipleMemoizedHelpers
+      context 'when query is a string' do
         let(:query_object) { query_string }
 
         it_behaves_like 'proper logging'
       end
 
-      context 'when query is a Query object' do # rubocop:disable RSpec/MultipleMemoizedHelpers
+      context 'when query is a Query object' do
         let(:query_object) { ClickHouse::Client::Query.new(raw_query: query_string) }
 
         it_behaves_like 'proper logging'
