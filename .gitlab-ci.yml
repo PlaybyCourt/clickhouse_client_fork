@@ -50,9 +50,10 @@ include:
   - component: gitlab.com/components/sast/sast@~latest
   - component: gitlab.com/components/secret-detection/secret-detection@~latest
   - component: gitlab.com/gitlab-org/components/gem-release/gem-release@~latest
-    gem_name: click_house-client
-    file_pattern_to_trigger_release: "lib/**/version.rb"
-    dry_run: true
+    inputs:
+      gem_name: click_house-client
+      file_pattern_to_trigger_release: "lib/**/version.rb"
+      dry_run: true
   - template: Security/Dependency-Scanning.gitlab-ci.yml
 
 # run security jobs on MRs
