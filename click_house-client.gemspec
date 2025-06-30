@@ -14,6 +14,12 @@ Gem::Specification.new do |spec|
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.0"
 
+  spec.files = Dir.chdir(File.expand_path(__dir__)) do
+    `git ls-files -z`.split("\x0").reject { |f| f.match(%r{^(test|spec|features)/}) }
+  end
+
+  spec.require_paths = ["lib"]
+
   spec.add_runtime_dependency "activesupport", "< 8"
   spec.add_runtime_dependency "addressable", "~> 2.8"
   spec.add_runtime_dependency 'json', '~> 2.7'
