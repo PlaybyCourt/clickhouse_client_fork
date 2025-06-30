@@ -2,6 +2,9 @@ stages:
   - test
   - deploy
 
+include:
+  - component: gitlab.com/gitlab-org/components/gem-release/gem-release@~latest
+
 workflow:
   rules:
     # For merge requests, create a pipeline.
