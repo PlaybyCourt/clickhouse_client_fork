@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    click_house-client (0.2.3)
+    click_house-client (0.2.4)
       activesupport (< 8)
       addressable (~> 2.8)
       json (~> 2.7)
@@ -106,7 +106,7 @@ CHECKSUMS
   activesupport (7.0.8.7) sha256=df4702375de924aae81709c831605317c5417f0bd9e502a0373ff84a067204ff
   addressable (2.8.4) sha256=40a88af5285625b7fb14070e550e667d5b0cc91f748068701b4d897cacda4897
   ast (2.4.2) sha256=1e280232e6a33754cde542bc5ef85520b74db2aac73ec14acef453784447cc12
-  click_house-client (0.2.3)
+  click_house-client (0.2.4)
   concurrent-ruby (1.2.2) sha256=3879119b8b75e3b62616acc256c64a134d0b0a7a9a3fcba5a233025bcde22c4f
   diff-lcs (1.5.0) sha256=49b934001c8c6aedb37ba19daec5c634da27b318a7a3c654ae979d6ba1929b67
   gitlab-styles (12.0.1) sha256=d8a302b0ab0e1f18e2d11501760f1b85c5e70b5e5ca628828a0786c7984ed133
