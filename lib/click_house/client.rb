@@ -5,6 +5,7 @@ require 'json'
 require 'active_support/time'
 require 'active_support/notifications'
 require 'active_support/core_ext/object/blank'
+require_relative "client/version"
 require_relative "client/database"
 require_relative "client/configuration"
 require_relative "client/bind_index_manager"

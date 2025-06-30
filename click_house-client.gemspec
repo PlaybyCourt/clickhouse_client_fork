@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
+require_relative "lib/click_house/client/version"
+
 Gem::Specification.new do |spec|
   spec.name = "click_house-client"
-  spec.version = "0.2.0"
+  spec.version = ClickHouse::Client::VERSION
   spec.authors = ["group::optimize"]
   spec.email = ["engineering@gitlab.com"]
 
