@@ -59,4 +59,4 @@ The gem is available as open source under the terms of the [MIT License](https:/
 
 ## Code of Conduct
 
-Everyone interacting in the Gitlab::Danger project's codebases, issue trackers, chat rooms and mailing lists is expected to follow the [code of conduct](https://gitlab.com/gitlab-org/ruby/gems/clickhouse-client/blob/master/CODE_OF_CONDUCT.md).
+Everyone interacting in the Gitlab::Danger project's codebases, issue trackers, chat rooms and mailing lists is expected to follow the [code of conduct](https://gitlab.com/gitlab-org/ruby/gems/clickhouse-client/-/blob/main/CODE_OF_CONDUCT.md?ref_type=heads).
