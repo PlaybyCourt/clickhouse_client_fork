@@ -14,7 +14,7 @@ module ClickHouse
       #
       # *http_post_proc*: A callable object for invoking the HTTP request.
       #   The object must handle the following parameters: url, headers, body
-      #   and return a Gitlab::ClickHouse::Client::Response object.
+      #   and return a ClickHouse::Client::Response object.
       #
       # *json_parser*: object for parsing JSON strings, it should respond to the "parse" method
       #
@@ -23,7 +23,7 @@ module ClickHouse
       #
       # Example:
       #
-      # Gitlab::ClickHouse::Client.configure do |c|
+      # ClickHouse::Client.configure do |c|
       #   c.register_database(:main,
       #     database: 'gitlab_clickhouse_test',
       #     url: 'http://localhost:8123',
@@ -47,7 +47,7 @@ module ClickHouse
       #     }
       #
       #     response = Gitlab::HTTP.post(url, options)
-      #     Gitlab::ClickHouse::Client::Response.new(response.body, response.code)
+      #     ClickHouse::Client::Response.new(response.body, response.code)
       #   end
       #
       #   c.json_parser = JSON
