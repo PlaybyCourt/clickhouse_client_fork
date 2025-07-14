@@ -3,7 +3,7 @@
 require 'spec_helper'
 
 RSpec.describe ClickHouse::Client::Query do
-  subject(:query) { described_class.new(raw_query: raw_query, placeholders: placeholders) }
+  subject(:query) { described_class.new(raw_query:, placeholders:) }
 
   let(:sql) { query.to_sql }
   let(:redacted_sql) { query.to_redacted_sql }
