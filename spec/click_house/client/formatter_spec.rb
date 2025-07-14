@@ -5,14 +5,14 @@ require 'spec_helper'
 RSpec.describe ClickHouse::Client::Formatter do
   it 'formats values according to types in metadata' do
     # this query here is just for documentation purposes, it generates the response below
-    _query = <<~SQL.squish
+    _query = <<~QUERY
       SELECT toUInt64(1) as uint64,
              toNullable(toUInt64(2)) as nullable_uint64,
              CAST(NULL AS Nullable(UInt64)) as nullable_uint64_null,
              toDateTime64('2016-06-15 23:00:00', 6, 'UTC') as datetime64_6,
              INTERVAL 1 second as interval_second,
              INTERVAL 1 millisecond as interval_millisecond
-    SQL
+    QUERY
 
     response_json = <<~JSON
 {

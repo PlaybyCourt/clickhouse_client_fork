@@ -141,7 +141,7 @@ RSpec.describe ClickHouse::Client do
 
       shared_examples 'proper logging' do
         it 'calls the custom logger and log_proc' do
-          expect(fake_logger).to receive(:info).at_least(:once).with({ query_string: query_string })
+          expect(fake_logger).to receive(:info).at_least(:once).with({ query_string: })
 
           described_class.select(query_object, :test_db, configuration)
         end

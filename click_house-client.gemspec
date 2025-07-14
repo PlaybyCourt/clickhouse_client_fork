@@ -12,7 +12,7 @@ Gem::Specification.new do |spec|
   spec.description = "This Gem provides a simple way to query ClickHouse databases using the HTTP interface."
   spec.homepage = "https://gitlab.com/gitlab-org/ruby/gems/clickhouse-client"
   spec.license = "MIT"
-  spec.required_ruby_version = ">= 3.0"
+  spec.required_ruby_version = ">= 3.1"
 
   spec.files = Dir.chdir(File.expand_path(__dir__)) do
     `git ls-files -z`.split("\x0").reject { |f| f.match(%r{^(test|spec|features)/}) }
@@ -20,7 +20,8 @@ Gem::Specification.new do |spec|
 
   spec.require_paths = ["lib"]
 
-  spec.add_runtime_dependency "activesupport", "< 8"
+  spec.add_runtime_dependency "activerecord", "~> 7.0"
+  spec.add_runtime_dependency "activesupport", "~> 7.0"
   spec.add_runtime_dependency "addressable", "~> 2.8"
   spec.add_runtime_dependency 'json', '~> 2.7'
 

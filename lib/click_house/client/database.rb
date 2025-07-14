@@ -11,7 +11,7 @@ module ClickHouse
         @username = username
         @password = password
         @variables = {
-          database: database,
+          database:,
           enable_http_compression: 1 # enable HTTP compression by default
         }.merge(variables).freeze
       end
