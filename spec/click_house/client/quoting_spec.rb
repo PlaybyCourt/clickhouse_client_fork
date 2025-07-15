@@ -21,6 +21,12 @@ RSpec.describe ClickHouse::Client::Quoting do
       end
     end
 
+    context 'with symbol' do
+      it 'wraps the string in quotes' do
+        expect(described_class.quote(:foo)).to eq("'foo'")
+      end
+    end
+
     context 'with numeric' do
       it 'returns string' do
         expect(described_class.quote(1)).to eq('1')
