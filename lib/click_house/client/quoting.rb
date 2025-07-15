@@ -7,7 +7,7 @@ module ClickHouse
         def quote(value)
           case value
           when Numeric then value.to_s
-          when String, Symbol then "'#{value.gsub('\\', '\&\&').gsub("'", "''")}'"
+          when String, Symbol then "'#{value.to_s.gsub('\\', '\&\&').gsub("'", "''")}'"
           when Array then "[#{value.map { |v| quote(v) }.join(',')}]"
           when nil then "NULL"
           else quote_str(value.to_s)
