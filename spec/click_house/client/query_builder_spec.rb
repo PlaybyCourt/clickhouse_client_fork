@@ -140,12 +140,84 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
 
         expect(sql).to eq(expected_sql)
       end
+
+      it 'builds a query using the NotIn node' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          WHERE `test_table`.`column1` NOT IN ('value1', 'value2')
+        SQL
+
+        sql = builder.where(builder.table[:column1].not_in(%w[value1 value2])).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'builds a query using the NotEqual node' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          WHERE `test_table`.`column1` != 'value1'
+        SQL
+
+        sql = builder.where(builder.table[:column1].not_eq('value1')).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'builds a query using the Between node' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          WHERE `test_table`.`column1` BETWEEN 1 AND 10
+        SQL
+
+        sql = builder.where(builder.table[:column1].between(1..10)).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'builds a query using the And node' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          WHERE `test_table`.`column1` = 'value1' AND `test_table`.`column2` = 'value2'
+        SQL
+
+        condition = builder.table[:column1].eq('value1').and(builder.table[:column2].eq('value2'))
+        sql = builder.where(condition).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'builds a query using the Or node' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          WHERE (`test_table`.`column1` = 'value1' OR `test_table`.`column2` = 'value2')
+        SQL
+
+        condition = builder.table[:column1].eq('value1').or(builder.table[:column2].eq('value2'))
+        sql = builder.where(condition).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'builds a query using the Grouping node' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          WHERE `test_table`.`status` = 'active' AND (`test_table`.`type` = 'premium' OR `test_table`.`type` = 'vip')
+        SQL
+
+        grouped_condition = Arel::Nodes::Grouping.new(
+          builder.table[:type].eq('premium').or(builder.table[:type].eq('vip'))
+        )
+        condition = builder.table[:status].eq('active').and(grouped_condition)
+        sql = builder.where(condition).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
     end
 
     context 'with unsupported arel nodes' do
       it 'raises an error for the unsupported node' do
         expect do
-          builder.where(builder.table[:column1].not_eq('value1')).to_sql
+          builder.where(builder.table[:column1].matches_regexp('pattern')).to_sql
         end.to raise_error(ArgumentError, /Unsupported Arel node type for QueryBuilder:/)
       end
     end
