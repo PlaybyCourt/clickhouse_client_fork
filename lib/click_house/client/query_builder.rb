@@ -15,7 +15,13 @@ module ClickHouse
         Arel::Nodes::LessThanOrEqual,
         Arel::Nodes::GreaterThan,
         Arel::Nodes::GreaterThanOrEqual,
-        Arel::Nodes::NamedFunction
+        Arel::Nodes::NamedFunction,
+        Arel::Nodes::NotIn,
+        Arel::Nodes::NotEqual,
+        Arel::Nodes::Between,
+        Arel::Nodes::And,
+        Arel::Nodes::Or,
+        Arel::Nodes::Grouping
       ].freeze
 
       def initialize(table_name)
