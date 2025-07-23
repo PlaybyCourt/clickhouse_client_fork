@@ -31,10 +31,15 @@ default:
   needs: []
   before_script:
     - gem install bundler
-    - bundle install -j $(nproc) --path vendor
+    - bundle config set path vendor
+    - bundle config set gemfile "gemfiles/Gemfile-rails-${RAILS_VERSION}"
+    - bundle install -j $(nproc)
   parallel:
     matrix:
-      - RUBY_VERSION: ['3.1', '3.2', '3.3']
+      - RUBY_VERSION: ['3.1', '3.2', '3.3', '3.4']
+        RAILS_VERSION: '7.2'
+      - RUBY_VERSION: ['3.2', '3.3', '3.4'] # Rails 8 requires Ruby 3.2+
+        RAILS_VERSION: '8.0'
 
 test:rspec:
   extends: .default-test-job
