@@ -2,6 +2,10 @@ inherit_gem:
   gitlab-styles:
     - rubocop-default.yml
 
+inherit_mode:
+  merge:
+    - Exclude
+
 CodeReuse/ActiveRecord:
   Enabled: false
 
@@ -9,6 +13,9 @@ AllCops:
   TargetRubyVersion: 3.1
   NewCops: enable
   SuggestExtensions: false
+  Exclude:
+    - 'vendor/**/*'
+    - "gemfiles/**/*"
 
 RSpec/MultipleMemoizedHelpers:
   Max: 10

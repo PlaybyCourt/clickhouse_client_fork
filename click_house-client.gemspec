@@ -20,14 +20,14 @@ Gem::Specification.new do |spec|
 
   spec.require_paths = ["lib"]
 
-  spec.add_runtime_dependency "activerecord", "~> 7.0"
-  spec.add_runtime_dependency "activesupport", "~> 7.0"
+  spec.add_runtime_dependency "activerecord", ">= 7.0", "< 9.0"
+  spec.add_runtime_dependency "activesupport", ">= 7.0", "< 9.0"
   spec.add_runtime_dependency "addressable", "~> 2.8"
-  spec.add_runtime_dependency 'json', '~> 2.7'
+  spec.add_runtime_dependency "json", "~> 2.7"
 
-  spec.add_development_dependency 'gitlab-styles', '~> 12.0.1'
+  spec.add_development_dependency "gitlab-styles", "~> 12.0.1"
   spec.add_development_dependency "rake", "~> 13.0"
   spec.add_development_dependency "rspec", "~> 3.0"
-  spec.add_development_dependency 'rubocop'
-  spec.add_development_dependency 'rubocop-rspec'
+  spec.add_development_dependency "rubocop"
+  spec.add_development_dependency "rubocop-rspec"
 end
