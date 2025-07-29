@@ -91,8 +91,14 @@ module ClickHouse
         validate_order_direction!(direction)
 
         deep_clone.tap do |new_instance|
-          table_field = new_instance.table[field]
-          new_order = direction.to_s.casecmp('desc').zero? ? table_field.desc : table_field.asc
+          order_node = case field
+                       when Arel::Nodes::SqlLiteral, Arel::Nodes::Node, Arel::Attribute
+                         field
+                       else
+                         new_instance.table[field]
+                       end
+
+          new_order = direction.to_s.casecmp('desc').zero? ? order_node.desc : order_node.asc
           new_instance.manager.order(new_order)
         end
       end
