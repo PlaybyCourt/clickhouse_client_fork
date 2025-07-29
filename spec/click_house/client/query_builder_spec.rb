@@ -335,7 +335,7 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
       end
     end
 
-    context 'edge cases' do
+    context 'with edge cases' do
       it 'handles string fields alongside Arel expressions' do
         literal = Arel.sql('COUNT(*)')
         expected_sql = <<~SQL.squish.chomp
