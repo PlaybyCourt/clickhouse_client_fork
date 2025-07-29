@@ -236,7 +236,7 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
 
     it 'builds correct select query with multiple fields' do
       expected_sql = <<~SQL.squish.chomp
-         SELECT `test_table`.`column1`, `test_table`.`column2` FROM `test_table`
+        SELECT `test_table`.`column1`, `test_table`.`column2` FROM `test_table`
       SQL
 
       sql = builder.select(:column1, :column2).to_sql
@@ -246,7 +246,7 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
 
     it 'adds new fields on multiple calls without duplicating' do
       expected_sql = <<~SQL.squish.chomp
-          SELECT `test_table`.`column1`, `test_table`.`column2` FROM `test_table`
+        SELECT `test_table`.`column1`, `test_table`.`column2` FROM `test_table`
       SQL
 
       sql = builder.select(:column1).select(:column2).select(:column1).to_sql
@@ -371,8 +371,8 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
   describe '#order' do
     it 'builds correct order query with direction :desc' do
       expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
-          SELECT * FROM `test_table`
-          ORDER BY `test_table`.`column1` DESC
+        SELECT * FROM `test_table`
+        ORDER BY `test_table`.`column1` DESC
       SQL
 
       sql = builder.order(:column1, :desc).to_sql
@@ -421,14 +421,108 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
       end.to raise_error(ArgumentError, "Invalid order direction 'invalid'. Must be :asc or :desc")
     end
 
+    context 'with Arel nodes' do
+      it 'supports Arel::SqlLiteral' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          ORDER BY RAND() ASC
+        SQL
+
+        sql = builder.order(Arel.sql('RAND()')).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'supports Arel::SqlLiteral with direction' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          ORDER BY LOWER(name) DESC
+        SQL
+
+        sql = builder.order(Arel.sql('LOWER(name)'), :desc).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'supports Arel::Nodes::NamedFunction' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          ORDER BY COALESCE(`test_table`.`priority`, 0) ASC
+        SQL
+
+        function_node = Arel::Nodes::NamedFunction.new(
+          'COALESCE',
+          [builder.table[:priority], 0]
+        )
+        sql = builder.order(function_node).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'supports Arel::Attribute directly' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          ORDER BY `test_table`.`column1` DESC
+        SQL
+
+        attribute = builder.table[:column1]
+        sql = builder.order(attribute, :desc).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'supports regular fields with Arel nodes' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          ORDER BY `test_table`.`column1` ASC,
+          RAND() DESC,
+          `test_table`.`column2` ASC
+        SQL
+
+        sql = builder
+                .order(:column1)
+                .order(Arel.sql('RAND()'), :desc)
+                .order(:column2)
+                .to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'supports complex Arel expressions like case' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          ORDER BY CASE WHEN `test_table`.`status` = 'active' THEN 1 ELSE 2 END ASC
+        SQL
+
+        case_node = Arel::Nodes::Case.new
+                                     .when(builder.table[:status].eq('active')).then(1)
+                                     .else(2)
+
+        sql = builder.order(case_node).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'supports ClickHouse-specific functions with Arel::SqlLiteral' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          ORDER BY sipHash64(`test_table`.`id`) ASC
+        SQL
+
+        sql = builder.order(Arel.sql('sipHash64(`test_table`.`id`)')).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+    end
+
     it_behaves_like "generates correct sql on multiple calls to `to_sql`", :order, :column1, :column2
   end
 
   describe '#limit' do
     it 'builds correct limit query' do
       expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
-          SELECT * FROM `test_table`
-          LIMIT 10
+        SELECT * FROM `test_table`
+        LIMIT 10
       SQL
 
       sql = builder.limit(10).to_sql
@@ -451,8 +545,8 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
   describe '#offset' do
     it 'builds correct offset query' do
       expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
-          SELECT * FROM `test_table`
-          OFFSET 5
+        SELECT * FROM `test_table`
+        OFFSET 5
       SQL
 
       sql = builder.offset(5).to_sql
@@ -512,14 +606,14 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
     it 'builds correct SQL query when methods are chained' do
       Time.use_zone('UTC') do
         expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
-            SELECT `test_table`.`column1`, `test_table`.`column2`
-            FROM `test_table`
-            WHERE `test_table`.`column1` = 'value1'
-            AND `test_table`.`column2` = 'value2'
-            AND `test_table`.`created_at` <= '#{Time.zone.today}'
-            ORDER BY `test_table`.`column1` DESC
-            LIMIT 10
-            OFFSET 5
+          SELECT `test_table`.`column1`, `test_table`.`column2`
+          FROM `test_table`
+          WHERE `test_table`.`column1` = 'value1'
+          AND `test_table`.`column2` = 'value2'
+          AND `test_table`.`created_at` <= '#{Time.zone.today}'
+          ORDER BY `test_table`.`column1` DESC
+          LIMIT 10
+          OFFSET 5
         SQL
 
         sql = builder
