@@ -60,10 +60,12 @@ module ClickHouse
       def select(*fields)
         deep_clone.tap do |new_instance|
           existing_fields = new_instance.manager.projections.filter_map do |projection|
-            if projection.is_a?(Arel::Attributes::Attribute)
-              projection.name.to_s
-            elsif projection.to_s == '*'
+            if projection.respond_to?(:to_s) && projection.to_s == '*'
               nil
+            elsif projection.is_a?(Arel::Attributes::Attribute)
+              projection.name.to_s
+            elsif projection.is_a?(Arel::Expressions)
+              projection
             end
           end
 

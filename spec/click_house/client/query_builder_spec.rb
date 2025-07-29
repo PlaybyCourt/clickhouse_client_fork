@@ -254,6 +254,117 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
       expect(sql).to eq(expected_sql)
     end
 
+    context 'with Arel expressions' do
+      it 'handles Arel::Nodes::SqlLiteral' do
+        literal = Arel.sql('COUNT(*) as count')
+        expected_sql = <<~SQL.squish.chomp
+          SELECT COUNT(*) as count FROM `test_table`
+        SQL
+
+        sql = builder.select(literal).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'handles Arel::Nodes::As (aliased columns)' do
+        aliased = builder.table[:column1].as('alias1')
+        expected_sql = <<~SQL.squish.chomp
+          SELECT `test_table`.`column1` AS alias1 FROM `test_table`
+        SQL
+
+        sql = builder.select(aliased).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'mixes regular fields with Arel expressions' do
+        literal = Arel.sql('NOW() as current_time')
+        expected_sql = <<~SQL.squish.chomp
+          SELECT `test_table`.`column1`, NOW() as current_time, `test_table`.`column2` FROM `test_table`
+        SQL
+
+        sql = builder.select(:column1, literal, :column2).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'preserves Arel expressions on multiple select calls' do
+        literal = Arel.sql('COUNT(*) as count')
+        aliased = builder.table[:column1].as('alias1')
+
+        expected_sql = <<~SQL.squish.chomp
+          SELECT COUNT(*) as count, `test_table`.`column1` AS alias1, `test_table`.`column2` FROM `test_table`
+        SQL
+
+        sql = builder.select(literal).select(aliased).select(:column2).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'deduplicates identical Arel expressions' do
+        literal = Arel.sql('DISTINCT column1')
+        expected_sql = <<~SQL.squish.chomp
+          SELECT DISTINCT column1 FROM `test_table`
+        SQL
+
+        sql = builder.select(literal).select(literal).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'handles Arel math operations' do
+        math_expr = (builder.table[:column1] + builder.table[:column2]).as('sum')
+        expected_sql = <<~SQL.squish.chomp
+          SELECT (`test_table`.`column1` + `test_table`.`column2`) AS sum FROM `test_table`
+        SQL
+
+        sql = builder.select(math_expr).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'handles Arel functions' do
+        func = Arel::Nodes::NamedFunction.new('COALESCE', [builder.table[:column1], 0])
+        expected_sql = <<~SQL.squish.chomp
+          SELECT COALESCE(`test_table`.`column1`, 0) FROM `test_table`
+        SQL
+
+        sql = builder.select(func).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+    end
+
+    context 'with edge cases' do
+      it 'handles string fields alongside Arel expressions' do
+        literal = Arel.sql('COUNT(*)')
+        expected_sql = <<~SQL.squish.chomp
+          SELECT `test_table`.`column1`, COUNT(*) FROM `test_table`
+        SQL
+
+        sql = builder.select('column1', literal).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'preserves all projections when mixing field types across multiple calls' do
+        literal = Arel.sql('MAX(column1) as max_val')
+        aliased = builder.table[:column2].as('col2')
+
+        sql = builder
+                .select(:column1)
+                .select(literal)
+                .select(aliased)
+                .select(:column3)
+                .to_sql
+
+        expect(sql).to include('`test_table`.`column1`')
+        expect(sql).to include('MAX(column1) as max_val')
+        expect(sql).to include('`test_table`.`column2` AS col2')
+        expect(sql).to include('`test_table`.`column3`')
+      end
+    end
+
     it_behaves_like "generates correct sql on multiple calls to `to_sql`", :select, :column1, :column2
   end
 
