@@ -566,6 +566,40 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
     end
   end
 
+  describe '#from' do
+    it 'builds a subquery into FROM correctly' do
+      inner = builder.select(:id).where(id: 1).limit(5)
+      outer = builder.select(:id).from(inner, 'foo').to_sql
+
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+      SELECT `test_table`.`id` FROM
+      (SELECT `test_table`.`id` FROM `test_table` WHERE `test_table`.`id` = 1 LIMIT 5) foo
+      SQL
+
+      expect(outer).to eq(expected_sql)
+    end
+
+    it 'builds a subquery from raw SQL snippet' do
+      inner = Arel.sql("(SELECT 1)")
+      outer = builder.from(inner, 'foo').to_sql
+
+      expect(outer).to eq('SELECT * FROM (SELECT 1) `foo`')
+    end
+
+    it 'raises error when non-arel compliant object is passes' do
+      expect { builder.from('(SELECT 1)', 'foo').to_sql }.to raise_error(Arel::Visitors::UnsupportedVisitError)
+    end
+
+    it 'does not mutate the existing builder object' do
+      query = builder.where(foo: 1)
+
+      inner = Arel.sql("(SELECT 1)")
+      query.from(inner, 'foo').to_sql
+
+      expect(query.to_sql).to eq('SELECT * FROM `test_table` WHERE `test_table`.`foo` = 1')
+    end
+  end
+
   describe '#group' do
     it 'builds correct group query' do
       expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
