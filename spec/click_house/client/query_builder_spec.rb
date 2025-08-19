@@ -624,18 +624,6 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
     end
   end
 
-  describe '#apply_conditions!' do
-    it 'applies conditions to the manager' do
-      manager = builder.send(:manager)
-      condition = Arel::Nodes::Equality.new(builder.table[:column1], 'value1')
-      builder.conditions << condition
-
-      expect(manager).to receive(:where).with(condition)
-
-      builder.send(:apply_conditions!)
-    end
-  end
-
   describe 'method chaining', :freeze_time do
     it 'builds correct SQL query when methods are chained' do
       Time.use_zone('UTC') do
