@@ -159,8 +159,7 @@ RSpec.describe ClickHouse::Client::Redactor do
       let(:mocked_builder) do
         instance_double(
           ClickHouse::Client::QueryBuilder,
-          conditions: [unsupported_node],
-          manager:
+          manager: instance_double(Arel::SelectManager, constraints: [unsupported_node])
         )
       end
 

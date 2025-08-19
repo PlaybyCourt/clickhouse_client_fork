@@ -6,7 +6,7 @@ module ClickHouse
   module Client
     class QueryBuilder < QueryLike
       attr_reader :table
-      attr_accessor :conditions, :manager
+      attr_accessor :manager
 
       VALID_NODES = [
         Arel::Nodes::In,
@@ -27,38 +27,39 @@ module ClickHouse
       def initialize(table_name)
         @table = Arel::Table.new(table_name)
         @manager = Arel::SelectManager.new(Arel::Table.engine).from(@table).project(Arel.star)
-        @conditions = []
+      end
+
+      def initialize_copy(other)
+        super
+
+        @manager = other.manager.clone
       end
 
       # The `where` method currently only supports IN and equal to queries along
       # with above listed VALID_NODES.
       # For example, using a range (start_date..end_date) will result in incorrect SQL.
-      # If you need to query a range, use greater than and less than conditions with Arel.
+      # If you need to query a range, use greater than and less than constraints with Arel.
       #
       # Correct usage:
       #   query.where(query.table[:created_at].lteq(Date.today)).to_sql
       #   "SELECT * FROM \"table\" WHERE \"table\".\"created_at\" <= '2023-08-01'"
       #
-      # This also supports array conditions which will result in an IN query.
+      # This also supports array constraints which will result in an IN query.
       #   query.where(entity_id: [1,2,3]).to_sql
       #   "SELECT * FROM \"table\" WHERE \"table\".\"entity_id\" IN (1, 2, 3)"
       #
       # Range support and more `Arel::Nodes` could be considered for future iterations.
       # @return [ClickHouse::QueryBuilder] New instance of query builder.
-      def where(conditions)
-        validate_condition_type!(conditions)
+      def where(constraints)
+        validate_constraint_type!(constraints)
 
-        deep_clone.tap do |new_instance|
-          if conditions.is_a?(Arel::Nodes::Node)
-            new_instance.conditions << conditions
-          else
-            add_conditions_to(new_instance, conditions)
-          end
+        clone.tap do |new_instance|
+          add_constraints_to(new_instance, constraints)
         end
       end
 
       def select(*fields)
-        deep_clone.tap do |new_instance|
+        clone.tap do |new_instance|
           existing_fields = new_instance.manager.projections.filter_map do |projection|
             if projection.respond_to?(:to_s) && projection.to_s == '*'
               nil
@@ -90,7 +91,7 @@ module ClickHouse
       def order(field, direction = :asc)
         validate_order_direction!(direction)
 
-        deep_clone.tap do |new_instance|
+        clone.tap do |new_instance|
           order_node = case field
                        when Arel::Nodes::SqlLiteral, Arel::Nodes::Node, Arel::Attribute
                          field
@@ -104,7 +105,7 @@ module ClickHouse
       end
 
       def group(*columns)
-        deep_clone.tap do |new_instance|
+        clone.tap do |new_instance|
           new_instance.manager.group(*columns)
         end
       end
@@ -120,7 +121,7 @@ module ClickHouse
       end
 
       def from(subquery, alias_name)
-        deep_clone.tap do |new_instance|
+        clone.tap do |new_instance|
           if subquery.is_a?(self.class)
             new_instance.manager.from(subquery.to_arel.as(alias_name))
           else
@@ -130,8 +131,6 @@ module ClickHouse
       end
 
       def to_sql
-        apply_conditions!
-
         visitor = Arel::Visitors::ToSql.new(ClickHouse::Client::ArelEngine.new)
         visitor.accept(manager.ast, Arel::Collectors::SQLString.new).value
       end
@@ -141,39 +140,27 @@ module ClickHouse
       end
 
       def to_arel
-        apply_conditions!
-
         manager
       end
 
       private
 
-      def validate_condition_type!(condition)
-        return unless condition.is_a?(Arel::Nodes::Node) && VALID_NODES.exclude?(condition.class)
+      def validate_constraint_type!(constraint)
+        return unless constraint.is_a?(Arel::Nodes::Node) && VALID_NODES.exclude?(constraint.class)
 
-        raise ArgumentError, "Unsupported Arel node type for QueryBuilder: #{condition.class.name}"
+        raise ArgumentError, "Unsupported Arel node type for QueryBuilder: #{constraint.class.name}"
       end
 
-      def add_conditions_to(instance, conditions)
-        conditions.each do |key, value|
-          instance.conditions << if value.is_a?(Array)
-                                   instance.table[key].in(value)
-                                 else
-                                   instance.table[key].eq(value)
-                                 end
+      def add_constraints_to(instance, constraints)
+        if constraints.is_a?(Arel::Nodes::Node)
+          instance.manager.where(constraints)
+        else
+          constraints.each do |key, value|
+            arel_constraint = value.is_a?(Array) ? instance.table[key].in(value) : instance.table[key].eq(value)
+
+            instance.manager.where(arel_constraint)
+          end
         end
-      end
-
-      def deep_clone
-        self.class.new(table.name).tap do |new_instance|
-          new_instance.manager = manager.clone
-          new_instance.conditions = conditions.map(&:clone)
-        end
-      end
-
-      def apply_conditions!
-        manager.constraints.clear
-        conditions.each { |condition| manager.where(condition) }
       end
 
       def validate_order_direction!(direction)
