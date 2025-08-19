@@ -69,18 +69,6 @@ secret_detection:
   variables:
     # Use a different scanning mode that doesn't rely on commit comparison
     SECURE_ANALYZERS_MODE: "full_repository_scan"
-
   rules:
     - if: '$CI_MERGE_REQUEST_IID'
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-
-.gem-release-default-rules:
-  rules:
-    - if: '$CI_PROJECT_ID != "71171912"'
-      when: never
-    # Taken from https://gitlab.com/gitlab-org/components/gem-release/-/blob/main/templates/gem-release/template.yml?ref_type=heads#L36
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-      changes: ["$[[ inputs.file_pattern_to_trigger_release ]]"]
-    - if: '$CI_MERGE_REQUEST_TITLE =~ /RELEASE/ && "$[[ inputs.dry_run ]]" == "true"'
-    - if: '$CI_MERGE_REQUEST_TITLE =~ /RELEASE/'
-      when: manual
