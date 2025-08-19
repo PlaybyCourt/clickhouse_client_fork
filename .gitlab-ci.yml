@@ -75,6 +75,12 @@ secret_detection:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
 .gem-release-default-rules:
-  # Limit gem publication to GitLab's ClickHouse Client project
   rules:
-    - if: $CI_PROJECT_ID == '71171912'
+    - if: '$CI_PROJECT_ID != "71171912"'
+      when: never
+    # Taken from https://gitlab.com/gitlab-org/components/gem-release/-/blob/main/templates/gem-release/template.yml?ref_type=heads#L36
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      changes: ["$[[ inputs.file_pattern_to_trigger_release ]]"]
+    - if: '$CI_MERGE_REQUEST_TITLE =~ /RELEASE/ && "$[[ inputs.dry_run ]]" == "true"'
+    - if: '$CI_MERGE_REQUEST_TITLE =~ /RELEASE/'
+      when: manual

@@ -119,6 +119,16 @@ module ClickHouse
         self
       end
 
+      def from(subquery, alias_name)
+        deep_clone.tap do |new_instance|
+          if subquery.is_a?(self.class)
+            new_instance.manager.from(subquery.to_arel.as(alias_name))
+          else
+            new_instance.manager.from(Arel::Nodes::TableAlias.new(subquery, alias_name))
+          end
+        end
+      end
+
       def to_sql
         apply_conditions!
 
@@ -128,6 +138,12 @@ module ClickHouse
 
       def to_redacted_sql(bind_index_manager = ClickHouse::Client::BindIndexManager.new)
         ClickHouse::Client::Redactor.redact(self, bind_index_manager)
+      end
+
+      def to_arel
+        apply_conditions!
+
+        manager
       end
 
       private
