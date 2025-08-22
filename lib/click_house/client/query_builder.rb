@@ -130,6 +130,34 @@ module ClickHouse
         end
       end
 
+      def joins(table_name, constraint = nil)
+        clone.tap do |new_instance|
+          join_table = table_name.is_a?(Arel::Table) ? table_name : Arel::Table.new(table_name)
+
+          join_condition = case constraint
+                           when Hash
+                             # Handle hash based constraints like { table1.id: table2.ref_id } or {id: :ref_id}
+                             constraint_conditions = constraint.map do |left, right|
+                               left_field = left.is_a?(Arel::Attributes::Attribute) ? left : new_instance.table[left]
+                               right_field = right.is_a?(Arel::Attributes::Attribute) ? right : join_table[right]
+                               left_field.eq(right_field)
+                             end
+
+                             constraint_conditions.reduce(&:and)
+                           when Proc
+                             constraint.call(new_instance.table, join_table)
+                           when Arel::Nodes::Node
+                             constraint
+                           end
+
+          if join_condition
+            new_instance.manager.join(join_table).on(join_condition)
+          else
+            new_instance.manager.join(join_table)
+          end
+        end
+      end
+
       def to_sql
         visitor = Arel::Visitors::ToSql.new(ClickHouse::Client::ArelEngine.new)
         visitor.accept(manager.ast, Arel::Collectors::SQLString.new).value
@@ -156,11 +184,27 @@ module ClickHouse
           instance.manager.where(constraints)
         else
           constraints.each do |key, value|
-            arel_constraint = value.is_a?(Array) ? instance.table[key].in(value) : instance.table[key].eq(value)
-
-            instance.manager.where(arel_constraint)
+            if value.is_a?(Hash)
+              # Handle nested hash for joined tables
+              join_table = Arel::Table.new(key)
+              value.each do |nested_key, nested_value|
+                build_arel_constraint(instance, join_table, nested_key, nested_value)
+              end
+            else
+              build_arel_constraint(instance, instance.table, key, value)
+            end
           end
         end
+      end
+
+      def build_arel_constraint(instance, table, key, value)
+        constraint = if value.is_a?(Array)
+                       table[key].in(value)
+                     else
+                       table[key].eq(value)
+                     end
+
+        instance.manager.where(constraint)
       end
 
       def validate_order_direction!(direction)
