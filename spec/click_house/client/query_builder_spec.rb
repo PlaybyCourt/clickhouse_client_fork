@@ -221,6 +221,91 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
         end.to raise_error(ArgumentError, /Unsupported Arel node type for QueryBuilder:/)
       end
     end
+
+    context 'with nested hash constraints for joined tables' do
+      let(:users_table) { Arel::Table.new('users') }
+
+      it 'adds conditions for a joined table using nested hash syntax' do
+        result = builder
+                   .joins('users', { 'user_id' => 'id' })
+                   .where(users: { active: true })
+
+        expect(result.to_sql).to include('INNER JOIN `users` ON `test_table`.`user_id` = `users`.`id`')
+        expect(result.to_sql).to include("WHERE `users`.`active` = 'true'")
+      end
+
+      it 'adds conditions with array values for a joined table' do
+        result = builder
+                   .joins('users', { 'user_id' => 'id' })
+                   .where(users: { id: [1, 2, 3] })
+
+        expect(result.to_sql).to include('INNER JOIN `users` ON `test_table`.`user_id` = `users`.`id`')
+        expect(result.to_sql).to include('WHERE `users`.`id` IN (1, 2, 3)')
+      end
+
+      it 'adds multiple conditions for a joined table' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          INNER JOIN `users` ON `test_table`.`user_id` = `users`.`id`
+              WHERE `users`.`active` = 'true' AND `users`.`role` = 'admin'
+        SQL
+        result = builder
+                   .joins('users', { 'user_id' => 'id' })
+                   .where(users: { active: true, role: 'admin' }).to_sql
+
+        expect(result).to eq(expected_sql)
+      end
+
+      it 'combines conditions on main table and joined table' do
+        result = builder
+                   .joins('users', { 'user_id' => 'id' })
+                   .where(
+                     column1: 'abcd',
+                     users: { active: true }
+                   )
+
+        expect(result.to_sql).to include('INNER JOIN `users` ON `test_table`.`user_id` = `users`.`id`')
+        expect(result.to_sql).to include('WHERE `test_table`.`column1` = \'abcd\'')
+        expect(result.to_sql).to include("AND `users`.`active` = 'true'")
+      end
+
+      it 'handles conditions for multiple joined tables' do
+        result = builder
+                   .joins('users', { 'user_id' => 'id' })
+                   .joins('projects', { 'project_id' => 'id' })
+                   .where(
+                     users: { active: true },
+                     projects: { status: 'active' }
+                   )
+
+        expect(result.to_sql).to include('INNER JOIN `users` ON `test_table`.`user_id` = `users`.`id`')
+        expect(result.to_sql).to include('INNER JOIN `projects` ON `test_table`.`project_id` = `projects`.`id`')
+        expect(result.to_sql).to include("WHERE `users`.`active` = 'true'")
+        expect(result.to_sql).to include('AND `projects`.`status` = \'active\'')
+      end
+
+      it 'handles chained where calls with nested hashes' do
+        result = builder
+                   .joins('users', { 'user_id' => 'id' })
+                   .where(users: { active: true })
+                   .where(users: { role: 'admin' })
+
+        expect(result.to_sql).to include('INNER JOIN `users` ON `test_table`.`user_id` = `users`.`id`')
+        expect(result.to_sql).to include("WHERE `users`.`active` = 'true'")
+        expect(result.to_sql).to include('AND `users`.`role` = \'admin\'')
+      end
+
+      it 'handles mixed constraint types in chained calls' do
+        result = builder
+                   .joins('users', { 'user_id' => 'id' })
+                   .where(users: { active: true })
+                   .where(builder.table[:created_at].gt(Date.today - 7.days))
+
+        expect(result.to_sql).to include('INNER JOIN `users` ON `test_table`.`user_id` = `users`.`id`')
+        expect(result.to_sql).to include("WHERE `users`.`active` = 'true'")
+        expect(result.to_sql).to include('AND `test_table`.`created_at` > ')
+      end
+    end
   end
 
   describe '#select' do
@@ -597,6 +682,91 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
       query.from(inner, 'foo').to_sql
 
       expect(query.to_sql).to eq('SELECT * FROM `test_table` WHERE `test_table`.`foo` = 1')
+    end
+  end
+
+  describe '#joins' do
+    let(:users_table) { Arel::Table.new('users') }
+
+    it 'adds a simple join without conditions' do
+      result = builder.joins('users')
+
+      expect(result.to_sql).to include('INNER JOIN `users`')
+      expect(result).not_to eq(builder) # Should return a new instance
+    end
+
+    context 'with hash constraints' do
+      it 'adds a join with a single equality condition' do
+        result = builder.joins('users', { 'user_id' => 'id' })
+
+        expect(result.to_sql).to include('INNER JOIN `users` ON `test_table`.`user_id` = `users`.`id`')
+      end
+
+      it 'adds a join with multiple equality conditions' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          INNER JOIN `users` ON
+          `test_table`.`user_id` = `users`.`id`
+              AND
+          `test_table`.`tenant_id` = `users`.`tenant_id`
+        SQL
+
+        result = builder.joins('users', { 'user_id' => 'id', 'tenant_id' => 'tenant_id' }).to_sql
+
+        expect(result).to eq(expected_sql)
+      end
+
+      it 'handles Arel attributes in hash constraints' do
+        result = builder.joins('users', { builder.table[:user_id] => users_table[:id] })
+
+        expect(result.to_sql).to include('INNER JOIN `users` ON `test_table`.`user_id` = `users`.`id`')
+      end
+    end
+
+    context 'with proc constraints' do
+      it 'adds a join with a proc-based condition' do
+        result = builder.joins('users', ->(test_table, users) { test_table[:user_id].eq(users[:id]) })
+
+        expect(result.to_sql).to include('INNER JOIN `users` ON `test_table`.`user_id` = `users`.`id`')
+      end
+
+      it 'handles complex conditions in proc' do
+        result = builder.joins('users', lambda { |test_table, users|
+          test_table[:user_id].eq(users[:id]).and(users[:active].eq(true))
+        })
+
+        expect(result.to_sql).to include('INNER JOIN `users` ON')
+        expect(result.to_sql).to include('`test_table`.`user_id` = `users`.`id`')
+        expect(result.to_sql).to include("`users`.`active` = 'true'")
+      end
+    end
+
+    context 'with Arel node constraints' do
+      it 'adds a join with an Arel node condition' do
+        condition = builder.table[:user_id].eq(users_table[:id])
+        result = builder.joins('users', condition)
+
+        expect(result.to_sql).to include('INNER JOIN `users` ON `test_table`.`user_id` = `users`.`id`')
+      end
+    end
+
+    context 'with Arel table as table_name' do
+      it 'uses the provided Arel table' do
+        result = builder.joins(users_table, { 'user_id' => 'id' })
+
+        expect(result.to_sql).to include('INNER JOIN `users` ON `test_table`.`user_id` = `users`.`id`')
+      end
+    end
+
+    context 'with multiple joins' do
+      it 'supports chaining multiple joins' do
+        result = builder
+                   .joins('users', { 'user_id' => 'id' })
+                   .joins('projects', { 'project_id' => 'id' })
+
+        expect(result.to_sql).to include('INNER JOIN `users` ON')
+        expect(result.to_sql).to include('INNER JOIN `projects` ON')
+      end
     end
   end
 
