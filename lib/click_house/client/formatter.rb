@@ -6,6 +6,9 @@ module ClickHouse
       DEFAULT = ->(value) { value }
 
       BASIC_TYPE_CASTERS = {
+        'Int32' => ->(value) { Integer(value) },
+        'UInt32' => ->(value) { Integer(value) },
+        'Int64' => ->(value) { Integer(value) },
         'UInt64' => ->(value) { Integer(value) },
         "DateTime64(6, 'UTC')" => ->(value) { ActiveSupport::TimeZone['UTC'].parse(value) },
         "IntervalSecond" => ->(value) { ActiveSupport::Duration.build(value.to_i) },

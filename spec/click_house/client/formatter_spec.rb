@@ -6,7 +6,10 @@ RSpec.describe ClickHouse::Client::Formatter do
   it 'formats values according to types in metadata' do
     # this query here is just for documentation purposes, it generates the response below
     _query = <<~QUERY
-      SELECT toUInt64(1) as uint64,
+      SELECT
+             toUInt32(1) as uint64,
+             toInt64(1) as int64,
+             toUInt64(1) as uint64,
              toNullable(toUInt64(2)) as nullable_uint64,
              CAST(NULL AS Nullable(UInt64)) as nullable_uint64_null,
              toDateTime64('2016-06-15 23:00:00', 6, 'UTC') as datetime64_6,
@@ -16,54 +19,69 @@ RSpec.describe ClickHouse::Client::Formatter do
 
     response_json = <<~JSON
 {
-	"meta":
-	[
-		{
-			"name": "uint64",
-			"type": "UInt64"
-		},
-		{
-			"name": "nullable_uint64",
-			"type": "Nullable(UInt64)"
-		},
-		{
-			"name": "nullable_uint64_null",
-			"type": "Nullable(UInt64)"
-		},
-		{
-			"name": "datetime64_6",
-			"type": "DateTime64(6, 'UTC')"
-		},
-		{
-			"name": "interval_second",
-			"type": "IntervalSecond"
-		},
-		{
-			"name": "interval_millisecond",
-			"type": "IntervalMillisecond"
-		}
-	],
+  "meta":
+  [
+    {
+      "name": "int32",
+      "type": "Int32"
+    },
+    {
+      "name": "uint32",
+      "type": "UInt32"
+    },
+    {
+      "name": "int64",
+      "type": "Int64"
+    },
+    {
+      "name": "uint64",
+      "type": "UInt64"
+    },
+    {
+      "name": "nullable_uint64",
+      "type": "Nullable(UInt64)"
+    },
+    {
+      "name": "nullable_uint64_null",
+      "type": "Nullable(UInt64)"
+    },
+    {
+      "name": "datetime64_6",
+      "type": "DateTime64(6, 'UTC')"
+    },
+    {
+      "name": "interval_second",
+      "type": "IntervalSecond"
+    },
+    {
+      "name": "interval_millisecond",
+      "type": "IntervalMillisecond"
+    }
+  ],
 
-	"data":
-	[
-		{
-			"uint64": "1",
-			"nullable_uint64": "2",
-			"nullable_uint64_null": null,
-			"datetime64_6": "2016-06-15 23:00:00.000000",
-			"interval_second": "1",
-			"interval_millisecond": "1"
-		}
-	],
+  "data":
+  [
+    {
+      "int32": "1",
+      "uint32": "1",
+      "int64": "1",
+      "uint64": "1",
+      "nullable_uint64": "2",
+      "nullable_uint64_null": null,
+      "datetime64_6": "2016-06-15 23:00:00.000000",
+      "interval_second": "1",
+      "interval_millisecond": "1"
+    }
+  ],
 
-	"rows": 1,
+  "rows": 1,
 
-	"statistics":
-	{
-		"elapsed": 0.00168,
-		"rows_read": 1,
-		"bytes_read": 1
-	}
+  "statistics":
+  {
+    "elapsed": 0.00168,
+    "rows_read": 1,
+    "bytes_read": 1
+  }
 }
     JSON
 
@@ -72,12 +90,17 @@ RSpec.describe ClickHouse::Client::Formatter do
 
     expect(formatted_response).to(
       eq(
-        [{ "uint64" => 1,
-           "nullable_uint64" => 2,
-           "nullable_uint64_null" => nil,
-           "datetime64_6" => ActiveSupport::TimeZone["UTC"].parse("2016-06-15 23:00:00"),
-           "interval_second" => 1.second,
-           "interval_millisecond" => 0.001.seconds }]
+        [{
+          "uint32" => 1,
+          "int32" => 1,
+          "int64" => 1,
+          "uint64" => 1,
+          "nullable_uint64" => 2,
+          "nullable_uint64_null" => nil,
+          "datetime64_6" => ActiveSupport::TimeZone["UTC"].parse("2016-06-15 23:00:00"),
+          "interval_second" => 1.second,
+          "interval_millisecond" => 0.001.seconds
+        }]
       )
     )
   end
