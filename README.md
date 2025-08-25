@@ -22,10 +22,13 @@ ClickHouse::Client.configure do |config|
 
   # Use any HTTP client to build the POST request, here we use Net::HTTP
   config.http_post_proc = ->(url, headers, body) do
-    # Query placeholders go to the URI
-    params = URI.encode_www_form(body.except("query"))
+    uri = URI.parse(url)
 
-    uri = URI.parse("#{url}&#{params}")
+    unless body.is_a?(IO)
+      # Append placeholders to URI's query
+      uri.query = [uri.query, URI.encode_www_form(body.except("query"))].compact.join('&')
+    end
+
     request = Net::HTTP::Post.new(uri)
 
     headers.each do |header, value|
@@ -33,9 +36,14 @@ ClickHouse::Client.configure do |config|
     end
 
     request['Content-type'] = 'application/x-www-form-urlencoded'
-    request.body = body["query"]
 
-    response = Net::HTTP.start(uri.hostname, uri.port) do |http|
+    if body.is_a?(IO)
+      request.body_stream = body
+    else
+      request.body = body['query']
+    end
+
+    response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') do |http|
       http.request(request)
     end
 
