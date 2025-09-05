@@ -54,7 +54,25 @@ module ClickHouse
         validate_constraint_type!(constraints)
 
         clone.tap do |new_instance|
-          add_constraints_to(new_instance, constraints)
+          apply_constraints(new_instance, constraints, :where)
+        end
+      end
+
+      # The `having` method applies constraints to the HAVING clause, similar to how
+      # `where` applies constraints to the WHERE clause. It supports the same constraint types.
+      # Correct usage:
+      #   query.group(:name).having(count: 5).to_sql
+      #   "SELECT * FROM \"table\" GROUP BY \"table\".\"name\" HAVING \"table\".\"count\" = 5"
+      #
+      #   query.group(:name).having(query.table[:count].gt(10)).to_sql
+      #   "SELECT * FROM \"table\" GROUP BY \"table\".\"name\" HAVING \"table\".\"count\" > 10"
+      #
+      # @return [ClickHouse::QueryBuilder] New instance of query builder.
+      def having(constraints)
+        validate_constraint_type!(constraints)
+
+        clone.tap do |new_instance|
+          apply_constraints(new_instance, constraints, :having)
         end
       end
 
@@ -179,32 +197,45 @@ module ClickHouse
         raise ArgumentError, "Unsupported Arel node type for QueryBuilder: #{constraint.class.name}"
       end
 
-      def add_constraints_to(instance, constraints)
+      def apply_constraints(instance, constraints, clause_type)
         if constraints.is_a?(Arel::Nodes::Node)
-          instance.manager.where(constraints)
+          apply_constraint_node(instance, constraints, clause_type)
         else
           constraints.each do |key, value|
             if value.is_a?(Hash)
               # Handle nested hash for joined tables
               join_table = Arel::Table.new(key)
               value.each do |nested_key, nested_value|
-                build_arel_constraint(instance, join_table, nested_key, nested_value)
+                constraint = build_constraint(join_table, nested_key, nested_value)
+                apply_constraint_node(instance, constraint, clause_type)
               end
             else
-              build_arel_constraint(instance, instance.table, key, value)
+              constraint = build_constraint(instance.table, key, value)
+              apply_constraint_node(instance, constraint, clause_type)
             end
           end
         end
       end
 
-      def build_arel_constraint(instance, table, key, value)
-        constraint = if value.is_a?(Array)
-                       table[key].in(value)
-                     else
-                       table[key].eq(value)
-                     end
+      def apply_constraint_node(instance, constraint, clause_type)
+        case clause_type
+        when :where
+          instance.manager.where(constraint)
+        when :having
+          instance.manager.having(constraint)
+        else
+          raise ArgumentError, "Unsupported clause type: #{clause_type}"
+        end
+      end
 
-        instance.manager.where(constraint)
+      def build_constraint(table, key, value)
+        if value.is_a?(Array)
+          table[key].in(value)
+        elsif value.is_a?(ClickHouse::Client::QueryBuilder)
+          table[key].in(value.to_arel)
+        else
+          table[key].eq(value)
+        end
       end
 
       def validate_order_direction!(direction)

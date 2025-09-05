@@ -306,6 +306,235 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
         expect(result.to_sql).to include('AND `test_table`.`created_at` > ')
       end
     end
+
+    context 'with subqueries' do
+      it 'supports subqueries in IN clause' do
+        subquery = described_class.new('foreign_table').select(:id).where(active: true)
+        result = builder.where(foreign_key: subquery)
+
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          WHERE `test_table`.`foreign_key` IN (SELECT `foreign_table`.`id` FROM `foreign_table` WHERE `foreign_table`.`active` = 'true')
+        SQL
+
+        expect(result.to_sql).to eq(expected_sql)
+      end
+    end
+  end
+
+  describe '#having' do
+    context 'with simple conditions' do
+      it 'builds correct having query' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          HAVING `test_table`.`column1` = 'value1'
+          AND `test_table`.`column2` = 'value2'
+        SQL
+
+        sql = builder.having(column1: 'value1', column2: 'value2').to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+    end
+
+    context 'with array conditions' do
+      it 'builds correct having query' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          HAVING `test_table`.`column1` IN (1, 2, 3)
+        SQL
+
+        sql = builder.having(column1: [1, 2, 3]).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+    end
+
+    it_behaves_like "generates correct sql on multiple calls to `to_sql`", :having, { column1: 'value1' },
+      { column2: 'value2' }
+
+    context 'with supported arel nodes' do
+      it 'builds a query using the In node' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          HAVING `test_table`.`column1` IN ('value1', 'value2')
+        SQL
+
+        sql = builder.having(builder.table[:column1].in(%w[value1 value2])).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'builds a query using the Equality node' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          HAVING `test_table`.`column1` = 'value1'
+        SQL
+
+        sql = builder.having(builder.table[:column1].eq('value1')).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'builds a query using the LessThan node' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          HAVING `test_table`.`column1` < 5
+        SQL
+
+        sql = builder.having(builder.table[:column1].lt(5)).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'builds a query using the GreaterThan node' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          HAVING `test_table`.`column1` > 5
+        SQL
+
+        sql = builder.having(builder.table[:column1].gt(5)).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'builds a query using the And node' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          HAVING `test_table`.`column1` = 'value1' AND `test_table`.`column2` = 'value2'
+        SQL
+
+        condition = builder.table[:column1].eq('value1').and(builder.table[:column2].eq('value2'))
+        sql = builder.having(condition).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'builds a query using the Or node' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          HAVING (`test_table`.`column1` = 'value1' OR `test_table`.`column2` = 'value2')
+        SQL
+
+        condition = builder.table[:column1].eq('value1').or(builder.table[:column2].eq('value2'))
+        sql = builder.having(condition).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+    end
+
+    context 'with unsupported arel nodes' do
+      it 'raises an error for the unsupported node' do
+        expect do
+          builder.having(builder.table[:column1].matches_regexp('pattern')).to_sql
+        end.to raise_error(ArgumentError, /Unsupported Arel node type for QueryBuilder:/)
+      end
+    end
+
+    context 'with nested hash constraints for joined tables' do
+      let(:users_table) { Arel::Table.new('users') }
+
+      it 'adds conditions for a joined table using nested hash syntax' do
+        result = builder
+                   .joins('users', { 'user_id' => 'id' })
+                   .having(users: { active: true })
+
+        expect(result.to_sql).to include('INNER JOIN `users` ON `test_table`.`user_id` = `users`.`id`')
+        expect(result.to_sql).to include("HAVING `users`.`active` = 'true'")
+      end
+
+      it 'adds conditions with array values for a joined table' do
+        result = builder
+                   .joins('users', { 'user_id' => 'id' })
+                   .having(users: { id: [1, 2, 3] })
+
+        expect(result.to_sql).to include('INNER JOIN `users` ON `test_table`.`user_id` = `users`.`id`')
+        expect(result.to_sql).to include('HAVING `users`.`id` IN (1, 2, 3)')
+      end
+
+      it 'combines conditions on main table and joined table' do
+        result = builder
+                   .joins('users', { 'user_id' => 'id' })
+                   .having(
+                     column1: 'abcd',
+                     users: { active: true }
+                   )
+
+        expect(result.to_sql).to include('INNER JOIN `users` ON `test_table`.`user_id` = `users`.`id`')
+        expect(result.to_sql).to include('HAVING `test_table`.`column1` = \'abcd\'')
+        expect(result.to_sql).to include("AND `users`.`active` = 'true'")
+      end
+    end
+
+    context 'with group by and having' do
+      it 'builds correct query with group by and having' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          GROUP BY column1
+          HAVING `test_table`.`count` > 5
+        SQL
+
+        sql = builder
+                .group(:column1)
+                .having(builder.table[:count].gt(5))
+                .to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'builds correct query with aggregation functions' do
+        count_func = Arel::Nodes::NamedFunction.new('COUNT', [Arel.star])
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          GROUP BY column1
+          HAVING COUNT(*) > 5
+        SQL
+
+        sql = builder
+                .group(:column1)
+                .having(count_func.gt(5))
+                .to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+    end
+
+    context 'with chained having calls' do
+      it 'combines multiple having conditions with AND' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          HAVING `test_table`.`column1` = 'value1'
+          AND `test_table`.`column2` > 10
+        SQL
+
+        sql = builder
+                .having(column1: 'value1')
+                .having(builder.table[:column2].gt(10))
+                .to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+    end
+
+    context 'with where and having combined' do
+      it 'correctly applies both where and having clauses' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          WHERE `test_table`.`status` = 'active'
+          GROUP BY column1
+          HAVING COUNT(*) > 5
+        SQL
+
+        count_func = Arel::Nodes::NamedFunction.new('COUNT', [Arel.star])
+        sql = builder
+                .where(status: 'active')
+                .group(:column1)
+                .having(count_func.gt(5))
+                .to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+    end
   end
 
   describe '#select' do
@@ -657,8 +886,8 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
       outer = builder.select(:id).from(inner, 'foo').to_sql
 
       expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
-      SELECT `test_table`.`id` FROM
-      (SELECT `test_table`.`id` FROM `test_table` WHERE `test_table`.`id` = 1 LIMIT 5) foo
+        SELECT `test_table`.`id` FROM
+        (SELECT `test_table`.`id` FROM `test_table` WHERE `test_table`.`id` = 1 LIMIT 5) foo
       SQL
 
       expect(outer).to eq(expected_sql)
