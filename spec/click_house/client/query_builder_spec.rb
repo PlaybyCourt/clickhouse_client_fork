@@ -320,6 +320,87 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
         expect(result.to_sql).to eq(expected_sql)
       end
     end
+
+    context 'with string pattern matching' do
+      it 'builds a query using the Matches node (ILIKE)' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          WHERE `test_table`.`column1` ILIKE 'value%'
+        SQL
+
+        sql = builder.where(builder.table[:column1].matches('value%')).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'builds using the Matches node with case_sensitive true (LIKE)' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          WHERE `test_table`.`column1` LIKE 'value%'
+        SQL
+
+        sql = builder.where(builder.table[:column1].matches('value%', nil, true)).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'builds using the Matches node with escape character' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          WHERE `test_table`.`column1` ILIKE 'value\\\\%' ESCAPE '\\\\'
+        SQL
+
+        sql = builder.where(builder.table[:column1].matches('value\\%', '\\')).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'builds using the DoesNotMatch node (NOT LIKE)' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          WHERE `test_table`.`column1` NOT ILIKE 'value%'
+        SQL
+
+        sql = builder.where(builder.table[:column1].does_not_match('value%')).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'builds with wildcard patterns' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          WHERE `test_table`.`column1` ILIKE '%value%'
+        SQL
+
+        sql = builder.where(builder.table[:column1].matches('%value%')).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'combines LIKE conditions with AND' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          WHERE `test_table`.`column1` ILIKE 'value%' AND `test_table`.`column2` ILIKE '%test%'
+        SQL
+
+        condition = builder.table[:column1].matches('value%').and(builder.table[:column2].matches('%test%'))
+        sql = builder.where(condition).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'combines LIKE conditions with OR' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          WHERE (`test_table`.`column1` ILIKE 'value%' OR `test_table`.`column2` ILIKE '%test%')
+        SQL
+
+        condition = builder.table[:column1].matches('value%').or(builder.table[:column2].matches('%test%'))
+        sql = builder.where(condition).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+    end
   end
 
   describe '#having' do
@@ -531,6 +612,30 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
                 .group(:column1)
                 .having(count_func.gt(5))
                 .to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+    end
+
+    context 'with string pattern matching' do
+      it 'builds a query using the Matches node (ILIKE)' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          HAVING `test_table`.`column1` ILIKE 'value%'
+        SQL
+
+        sql = builder.having(builder.table[:column1].matches('value%')).to_sql
+
+        expect(sql).to eq(expected_sql)
+      end
+
+      it 'builds using the Matches node with case_sensitive true (LIKE)' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          HAVING `test_table`.`column1` LIKE 'value%'
+        SQL
+
+        sql = builder.having(builder.table[:column1].matches('value%', nil, true)).to_sql
 
         expect(sql).to eq(expected_sql)
       end
