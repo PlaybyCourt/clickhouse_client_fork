@@ -19,6 +19,7 @@ require_relative "client/redactor"
 require_relative "client/query_builder"
 require_relative "client/formatter"
 require_relative "client/response"
+require_relative "client/arel_visitor"
 
 module ClickHouse
   module Client

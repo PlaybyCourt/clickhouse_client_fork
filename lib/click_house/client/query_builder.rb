@@ -21,7 +21,9 @@ module ClickHouse
         Arel::Nodes::Between,
         Arel::Nodes::And,
         Arel::Nodes::Or,
-        Arel::Nodes::Grouping
+        Arel::Nodes::Grouping,
+        Arel::Nodes::Matches,
+        Arel::Nodes::DoesNotMatch
       ].freeze
 
       def initialize(table_name)
@@ -177,7 +179,7 @@ module ClickHouse
       end
 
       def to_sql
-        visitor = Arel::Visitors::ToSql.new(ClickHouse::Client::ArelEngine.new)
+        visitor = ClickHouse::Client::ArelVisitor.new(ClickHouse::Client::ArelEngine.new)
         visitor.accept(manager.ast, Arel::Collectors::SQLString.new).value
       end
 
