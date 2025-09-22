@@ -1,6 +1,22 @@
 # frozen_string_literal: true
 
+require 'uri'
+require 'tempfile'
+require 'stringio'
+
 RSpec.describe ClickHouse::Client do
+  let(:database_config) do
+    {
+      database: 'test_db',
+      url: 'http://localhost:3333',
+      username: 'user',
+      password: 'pass',
+      variables: {
+        join_use_nulls: 1
+      }
+    }
+  end
+
   describe '#select' do
     # Assuming we have a DB table with the following schema
     #
@@ -15,18 +31,6 @@ RSpec.describe ClickHouse::Client do
     # ORDER BY (id)
 
     let(:query_result_fixture) { File.expand_path('../fixtures/query_result.json', __dir__) }
-
-    let(:database_config) do
-      {
-        database: 'test_db',
-        url: 'http://localhost:3333',
-        username: 'user',
-        password: 'pass',
-        variables: {
-          join_use_nulls: 1
-        }
-      }
-    end
 
     let(:configuration) do
       ClickHouse::Client::Configuration.new.tap do |config|
@@ -158,6 +162,68 @@ RSpec.describe ClickHouse::Client do
 
         it_behaves_like 'proper logging'
       end
+    end
+  end
+
+  describe '#insert_csv' do
+    let(:actual) { Struct.new(:url, :headers, :query).new }
+    let(:query_string) { 'INSERT INTO events (id) FORMAT CSV' }
+
+    let(:configuration) do
+      ClickHouse::Client::Configuration.new.tap do |config|
+        config.log_proc = lambda { |query|
+          { query_string: query.to_sql }
+        }
+        config.register_database(:test_db, **database_config)
+        config.http_post_proc = lambda { |url, headers, query|
+          actual.url = url
+          actual.headers = headers
+          actual.query = query
+          ClickHouse::Client::Response.new({}, 200)
+        }
+      end
+    end
+
+    let(:gzip_content) do
+      ActiveSupport::Gzip.compress(<<~CSV)
+        id
+        10
+        20
+      CSV
+    end
+
+    subject(:insert_csv) { described_class.insert_csv(query_string, io, :test_db, configuration) }
+
+    shared_examples 'CSV insert' do
+      it 'inserts a CSV' do
+        expect(insert_csv).to be(true)
+
+        expect(actual.url).to include(URI.encode_uri_component(query_string))
+        expect(actual.headers).to include(
+          'Transfer-Encoding' => 'chunked',
+          'Content-Encoding' => 'gzip'
+        )
+      end
+    end
+
+    context 'with CSV file' do
+      let(:io) { Tempfile.create('events.csv.gz') }
+
+      before do
+        File.binwrite(io.path, gzip_content)
+      end
+
+      after do
+        FileUtils.rm_f(io.path)
+      end
+
+      it_behaves_like 'CSV insert'
+    end
+
+    context 'with CSV StringIO' do
+      let(:io) { StringIO.new(gzip_content) }
+
+      it_behaves_like 'CSV insert'
     end
   end
 end
