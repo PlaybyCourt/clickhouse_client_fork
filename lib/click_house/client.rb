@@ -77,7 +77,6 @@ module ClickHouse
 
       headers = db.headers.merge(
         'Transfer-Encoding' => 'chunked',
-        'Content-Length' => File.size(io).to_s,
         'Content-Encoding' => 'gzip'
       )
 
