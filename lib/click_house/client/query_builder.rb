@@ -23,7 +23,10 @@ module ClickHouse
         Arel::Nodes::Or,
         Arel::Nodes::Grouping,
         Arel::Nodes::Matches,
-        Arel::Nodes::DoesNotMatch
+        Arel::Nodes::DoesNotMatch,
+        Arel::Nodes::Division,
+        Arel::Nodes::Multiplication,
+        Arel::Nodes::As
       ].freeze
 
       def initialize(table_name)
@@ -178,6 +181,134 @@ module ClickHouse
         end
       end
 
+      # Aggregation helper methods
+
+      # Creates an AVG aggregate function node
+      # @param column [Symbol, String, Arel::Expressions] The column to average
+      # @return [Arel::Nodes::NamedFunction] The AVG function node
+      # @example Basic average
+      #   query.select(query.avg(:duration)).to_sql
+      #   # => "SELECT avg(`table`.`duration`) FROM `table`"
+      # @example Average with alias
+      #   query.select(query.avg(:price).as('average_price')).to_sql
+      #   # => "SELECT avg(`table`.`price`) AS average_price FROM `table`"
+      def avg(column)
+        column_node = normalize_operand(column)
+        Arel::Nodes::NamedFunction.new('avg', [column_node])
+      end
+
+      # Creates a quantile aggregate function node
+      # @param level [Float] The quantile level (e.g., 0.5 for median)
+      # @param column [Symbol, String, Arel::Expressions] The column to calculate quantile for
+      # @return [Arel::Nodes::NamedFunction] The quantile function node
+      # @example Calculate median (50th percentile)
+      #   query.select(query.quantile(0.5, :response_time)).to_sql
+      #   # => "SELECT quantile(0.5)(`table`.`response_time`) FROM `table`"
+      # @example Calculate 95th percentile with alias
+      #   query.select(query.quantile(0.95, :latency).as('p95')).to_sql
+      #   # => "SELECT quantile(0.95)(`table`.`latency`) AS p95 FROM `table`"
+      def quantile(level, column)
+        column_node = normalize_operand(column)
+        Arel::Nodes::NamedFunction.new("quantile(#{level})", [column_node])
+      end
+
+      # Creates a COUNT aggregate function node
+      # @param column [Symbol, String, Arel::Expressions, nil] The column to count, or nil for COUNT(*)
+      # @return [Arel::Nodes::NamedFunction] The COUNT function node
+      # @example Count all rows
+      #   query.select(query.count).to_sql
+      #   # => "SELECT count() FROM `table`"
+      # @example Count specific column
+      #   query.select(query.count(:id)).to_sql
+      #   # => "SELECT count(`table`.`id`) FROM `table`"
+      def count(column = nil)
+        if column.nil?
+          Arel::Nodes::NamedFunction.new('count', [])
+        else
+          column_node = normalize_operand(column)
+          Arel::Nodes::NamedFunction.new('count', [column_node])
+        end
+      end
+
+      # Creates a countIf aggregate function node
+      # @param condition [Arel::Nodes::Node] The condition to count
+      # @return [Arel::Nodes::NamedFunction] The countIf function node
+      # @raise [ArgumentError] if condition is not an Arel node
+      # @example Count rows matching a condition
+      #   query.select(query.count_if(query.table[:status].eq('active'))).to_sql
+      #   # => "SELECT countIf(`table`.`status` = 'active') FROM `table`"
+      def count_if(condition)
+        raise ArgumentError, "countIf requires an Arel node as condition" unless condition.is_a?(Arel::Nodes::Node)
+
+        Arel::Nodes::NamedFunction.new('countIf', [condition])
+      end
+
+      # Creates a division node with grouping
+      # @param left [Arel::Expressions, Symbol, String, Numeric] The dividend
+      # @param right [Arel::Expressions, Symbol, String, Numeric] The divisor
+      # @return [Arel::Nodes::Grouping] The grouped division node for proper precedence
+      # @example Simple division
+      #   query.select(query.division(:completed, :total)).to_sql
+      #   # => "SELECT (`table`.`completed` / `table`.`total`) FROM `table`"
+      # @example Calculate percentage
+      #   rate = query.division(:success_count, :total_count)
+      #   query.select(query.multiply(rate, 100).as('success_rate')).to_sql
+      #   # => "SELECT ((`table`.`success_count` / `table`.`total_count`) * 100) AS success_rate FROM `table`"
+      def division(left, right)
+        left_node = normalize_operand(left)
+        right_node = normalize_operand(right)
+
+        Arel::Nodes::Grouping.new(Arel::Nodes::Division.new(left_node, right_node))
+      end
+
+      # Creates a multiplication node with grouping
+      # @param left [Arel::Expressions, Symbol, String, Numeric] The left operand
+      # @param right [Arel::Expressions, Symbol, String, Numeric] The right operand
+      # @return [Arel::Nodes::Grouping] The grouped multiplication node for proper precedence
+      # @example Multiply columns
+      #   query.select(query.multiply(:quantity, :unit_price)).to_sql
+      #   # => "SELECT (`table`.`quantity` * `table`.`unit_price`) FROM `table`"
+      # @example Convert to percentage
+      #   query.select(query.multiply(:rate, 100).as('percentage')).to_sql
+      #   # => "SELECT (`table`.`rate` * 100) AS percentage FROM `table`"
+      def multiply(left, right)
+        left_node = normalize_operand(left)
+        right_node = normalize_operand(right)
+
+        Arel::Nodes::Grouping.new(Arel::Nodes::Multiplication.new(left_node, right_node))
+      end
+
+      # Creates an equality node
+      # @param left [Arel::Expressions, Symbol, String] The left side of the comparison
+      # @param right [Arel::Expressions, Symbol, String, Numeric, Boolean] The right side of the comparison
+      # @return [Arel::Nodes::Equality] The equality node
+      # @example Use in WHERE clause
+      #   query.where(query.equality(:status, 'active')).to_sql
+      #   # => "SELECT * FROM `table` WHERE `table`.`status` = 'active'"
+      # @example Use with countIf
+      #   query.select(query.count_if(query.equality(:type, 'premium'))).to_sql
+      #   # => "SELECT countIf(`table`.`type` = 'premium') FROM `table`"
+      def equality(left, right)
+        left_node = normalize_operand(left)
+        right_node = normalize_operand(right)
+        Arel::Nodes::Equality.new(left_node, right_node)
+      end
+
+      # Creates an alias for a node
+      # @param node [Arel::Nodes::Node] The node to alias
+      # @param alias_name [String, Symbol] The alias name
+      # @return [Arel::Nodes::As] The aliased node
+      # @raise [ArgumentError] if node is not an Arel Expression
+      # @example Alias an aggregate function
+      #   avg_node = query.avg(:price)
+      #   query.select(query.as(avg_node, 'average_price')).to_sql
+      #   # => "SELECT avg(`table`.`price`) AS average_price FROM `table`"
+      def as(node, alias_name)
+        raise ArgumentError, "as requires an Arel node" unless node.is_a?(Arel::Expressions)
+
+        node.as(alias_name.to_s)
+      end
+
       def to_sql
         visitor = ClickHouse::Client::ArelVisitor.new(ClickHouse::Client::ArelEngine.new)
         visitor.accept(manager.ast, Arel::Collectors::SQLString.new).value
@@ -192,6 +323,17 @@ module ClickHouse
       end
 
       private
+
+      def normalize_operand(operand)
+        case operand
+        when Arel::Expressions
+          operand
+        when Symbol, String
+          table[operand.to_s]
+        else
+          Arel::Nodes.build_quoted(operand)
+        end
+      end
 
       def validate_constraint_type!(constraint)
         return unless constraint.is_a?(Arel::Nodes::Node) && VALID_NODES.exclude?(constraint.class)
