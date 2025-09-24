@@ -26,6 +26,18 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
     end
   end
 
+  shared_examples 'VALID_NODES test' do |method|
+    it "allows Division nodes in #{method} clauses" do
+      div_node = builder.division(:a, :b)
+      expect { builder.public_send(method, div_node.gt(1)).to_sql }.not_to raise_error
+    end
+
+    it "allows Multiplication nodes in #{method} clauses" do
+      mul_node = builder.multiply(:a, 100)
+      expect { builder.public_send(method, mul_node.lt(1000)).to_sql }.not_to raise_error
+    end
+  end
+
   describe "#initialize" do
     it 'initializes with correct table' do
       expect(builder.table.name).to eq(table_name.to_s)
@@ -401,6 +413,8 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
         expect(sql).to eq(expected_sql)
       end
     end
+
+    include_examples 'VALID_NODES test', :where
   end
 
   describe '#having' do
@@ -640,6 +654,8 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
         expect(sql).to eq(expected_sql)
       end
     end
+
+    include_examples 'VALID_NODES test', :having
   end
 
   describe '#select' do
@@ -1202,6 +1218,347 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
 
         expect(query.to_redacted_sql).to eq(expected_redacted_sql)
       end
+    end
+  end
+
+  describe '#avg' do
+    let(:avg_node) { builder.avg(:duration) }
+
+    it 'creates an AVG function node for a column' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT avg(`test_table`.`duration`) FROM `test_table`
+      SQL
+
+      expect(avg_node).to be_a(Arel::Nodes::NamedFunction)
+      expect(avg_node.name).to eq('avg')
+
+      sql = builder.select(avg_node).to_sql
+      expect(sql).to eq(expected_sql)
+    end
+
+    it 'creates an AVG function with an Arel node' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT avg(`test_table`.`duration`) FROM `test_table`
+      SQL
+
+      column_node = builder.table[:duration]
+      avg_node = builder.avg(column_node)
+
+      sql = builder.select(avg_node).to_sql
+      expect(sql).to eq(expected_sql)
+    end
+
+    it 'works with division and aliasing' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT round((avg(`test_table`.`duration`) / 1000.0), 2) AS mean_duration_in_seconds FROM `test_table`
+      SQL
+      divided = builder.division(avg_node, 1000.0)
+      rounded = Arel::Nodes::NamedFunction.new('round', [divided, 2])
+      aliased = builder.as(rounded, 'mean_duration_in_seconds')
+
+      sql = builder.select(aliased).to_sql
+      expect(sql).to eq(expected_sql)
+    end
+  end
+
+  describe '#quantile' do
+    it 'creates a quantile function node' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT quantile(0.5)(`test_table`.`response_time`) FROM `test_table`
+      SQL
+
+      quantile_node = builder.quantile(0.5, :response_time)
+
+      expect(quantile_node).to be_a(Arel::Nodes::NamedFunction)
+      expect(quantile_node.name).to eq('quantile(0.5)')
+      expect(builder.select(quantile_node).to_sql).to eq(expected_sql)
+    end
+
+    it 'works with different quantile levels' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT quantile(0.75)(`test_table`.`response_time`) FROM `test_table`
+      SQL
+
+      q75_node = builder.quantile(0.75, :response_time)
+
+      expect(builder.select(q75_node).to_sql).to eq(expected_sql)
+    end
+
+    it 'accepts Arel nodes as column' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT quantile(0.95)(`test_table`.`response_time`) FROM `test_table`
+      SQL
+
+      column_node = builder.table[:response_time]
+      quantile_node = builder.quantile(0.95, column_node)
+
+      expect(builder.select(quantile_node).to_sql).to eq(expected_sql)
+    end
+  end
+
+  describe '#count' do
+    it 'creates a COUNT(*) function when no column is specified' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT count() FROM `test_table`
+      SQL
+
+      count_node = builder.count
+
+      expect(count_node).to be_a(Arel::Nodes::NamedFunction)
+      expect(count_node.name).to eq('count')
+      expect(builder.select(count_node).to_sql).to eq(expected_sql)
+    end
+
+    it 'creates a COUNT(column) function when column is specified' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT count(`test_table`.`id`) FROM `test_table`
+      SQL
+
+      count_node = builder.count(:id)
+      expect(builder.select(count_node).to_sql).to eq(expected_sql)
+    end
+
+    it 'accepts Arel nodes as column' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT count(`test_table`.`id`) FROM `test_table`
+      SQL
+
+      count_node = builder.count(builder.table[:id])
+      expect(builder.select(count_node).to_sql).to eq(expected_sql)
+    end
+  end
+
+  describe '#count_if' do
+    it 'creates a countIf function with a condition' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT countIf(`test_table`.`status` = 'failure') FROM `test_table`
+      SQL
+
+      count_if_node = builder.count_if(builder.equality(:status, Arel::Nodes.build_quoted('failure')))
+
+      expect(count_if_node).to be_a(Arel::Nodes::NamedFunction)
+      expect(count_if_node.name).to eq('countIf')
+      expect(builder.select(count_if_node).to_sql).to eq(expected_sql)
+    end
+
+    it 'works with complex conditions' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT countIf(`test_table`.`status` = 'active' AND `test_table`.`count` > 5) FROM `test_table`
+      SQL
+
+      condition = builder.table[:status].eq('active').and(builder.table[:count].gt(5))
+      count_if_node = builder.count_if(condition)
+      expect(builder.select(count_if_node).to_sql).to eq(expected_sql)
+    end
+
+    it 'raises error when non-Arel node is passed' do
+      expect { builder.count_if('not_a_node') }.to raise_error(ArgumentError, /countIf requires an Arel node/)
+    end
+
+    it 'works in the real-time example - failure rate calculation' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT round(((countIf(`test_table`.`status` = 'failure') / count()) * 100), 2) AS rate_of_failure FROM `test_table`
+      SQL
+      count_if_node = builder.count_if(builder.equality(:status, Arel::Nodes.build_quoted('failure')))
+      total_count = builder.count
+
+      failure_rate = builder.division(count_if_node, total_count)
+      percentage = builder.multiply(failure_rate, 100)
+      rounded = Arel::Nodes::NamedFunction.new('round', [percentage, 2])
+      aliased = builder.as(rounded, 'rate_of_failure')
+
+      expect(builder.select(aliased).to_sql).to eq(expected_sql)
+    end
+  end
+
+  describe '#division' do
+    it 'creates a division node with two columns' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT (`test_table`.`numerator` / `test_table`.`denominator`) FROM `test_table`
+      SQL
+
+      div_node = builder.division(:numerator, :denominator)
+
+      expect(div_node.expr).to be_a(Arel::Nodes::Division)
+      expect(builder.select(div_node).to_sql).to eq(expected_sql)
+    end
+
+    it 'works with numeric literals' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT (`test_table`.`price` / 100) FROM `test_table`
+      SQL
+
+      div_node = builder.division(:price, 100)
+
+      expect(builder.select(div_node).to_sql).to eq(expected_sql)
+    end
+
+    it 'works with Arel nodes' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT (sum(`test_table`.`amount`) / 1000.0) FROM `test_table`
+      SQL
+
+      sum_node = Arel::Nodes::NamedFunction.new('sum', [builder.table[:amount]])
+      div_node = builder.division(sum_node, 1000.0)
+
+      expect(builder.select(div_node).to_sql).to eq(expected_sql)
+    end
+
+    it 'can be nested' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT ((`test_table`.`a` / `test_table`.`b`) / `test_table`.`c`) FROM `test_table`
+      SQL
+      div1 = builder.division(:a, :b)
+      div2 = builder.division(div1, :c)
+
+      expect(builder.select(div2).to_sql).to eq(expected_sql)
+    end
+  end
+
+  describe '#multiply' do
+    it 'creates a multiplication node with two columns' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT (`test_table`.`quantity` * `test_table`.`price`) FROM `test_table`
+      SQL
+      mul_node = builder.multiply(:quantity, :price)
+
+      expect(mul_node.expr).to be_a(Arel::Nodes::Multiplication)
+      expect(builder.select(mul_node).to_sql).to eq(expected_sql)
+    end
+
+    it 'works with numeric literals' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT (`test_table`.`rate` * 100) FROM `test_table`
+      SQL
+      mul_node = builder.multiply(:rate, 100)
+
+      expect(builder.select(mul_node).to_sql).to eq(expected_sql)
+    end
+
+    it 'works with Arel nodes' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT (avg(`test_table`.`score`) * 1.5) FROM `test_table`
+      SQL
+
+      avg_node = builder.avg(:score)
+      mul_node = builder.multiply(avg_node, 1.5)
+
+      expect(builder.select(mul_node).to_sql).to eq(expected_sql)
+    end
+
+    it 'can be combined with division' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT ((`test_table`.`part` / `test_table`.`whole`) * 100) FROM `test_table`
+      SQL
+
+      div_node = builder.division(:part, :whole)
+      mul_node = builder.multiply(div_node, 100)
+
+      expect(builder.select(mul_node).to_sql).to eq(expected_sql)
+    end
+  end
+
+  describe '#equality' do
+    it 'creates an equality node' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT * FROM `test_table` WHERE `test_table`.`status` = 'active'
+      SQL
+
+      eq_node = builder.equality(:status, Arel::Nodes.build_quoted('active'))
+
+      expect(eq_node).to be_a(Arel::Nodes::Equality)
+      expect(builder.where(eq_node).to_sql).to eq(expected_sql)
+    end
+
+    it 'works with numeric values' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT * FROM `test_table` WHERE `test_table`.`count` = 5
+      SQL
+
+      eq_node = builder.equality(:count, 5)
+
+      expect(builder.where(eq_node).to_sql).to eq(expected_sql)
+    end
+
+    it 'works with boolean values' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT * FROM `test_table` WHERE `test_table`.`active` = 'true'
+      SQL
+
+      eq_node = builder.equality(:active, true)
+
+      expect(builder.where(eq_node).to_sql).to eq(expected_sql)
+    end
+
+    it 'works with Arel nodes on the left side' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT * FROM `test_table` WHERE lower(`test_table`.`name`) = 'test'
+      SQL
+
+      func_node = Arel::Nodes::NamedFunction.new('lower', [builder.table[:name]])
+      eq_node = builder.equality(func_node, Arel::Nodes.build_quoted('test'))
+
+      expect(builder.where(eq_node).to_sql).to eq(expected_sql)
+    end
+
+    it 'can be used in countIf' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT countIf(`test_table`.`status` = 'failure') FROM `test_table`
+      SQL
+
+      eq_node = builder.equality(:status, Arel::Nodes.build_quoted('failure'))
+      count_if_node = builder.count_if(eq_node)
+
+      expect(builder.select(count_if_node).to_sql).to eq(expected_sql)
+    end
+  end
+
+  describe '#as' do
+    it 'creates an alias for a column' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT `test_table`.`id` AS user_id FROM `test_table`
+      SQL
+
+      column_node = builder.table[:id]
+      aliased = builder.as(column_node, 'user_id')
+      expect(builder.select(aliased).to_sql).to eq(expected_sql)
+    end
+
+    it 'creates an alias for a function' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT count() AS total_count FROM `test_table`
+      SQL
+
+      count_node = builder.count
+      aliased = builder.as(count_node, 'total_count')
+
+      expect(builder.select(aliased).to_sql).to eq(expected_sql)
+    end
+
+    it 'creates an alias for arithmetic operations' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT ((`test_table`.`completed` / `test_table`.`total`) * 100) AS completion_rate FROM `test_table`
+      SQL
+
+      div_node = builder.division(:completed, :total)
+      mul_node = builder.multiply(div_node, 100)
+      aliased = builder.as(mul_node, 'completion_rate')
+
+      expect(builder.select(aliased).to_sql).to eq(expected_sql)
+    end
+
+    it 'raises error when non-Arel node is passed' do
+      expect { builder.as('not_a_node', 'alias') }.to raise_error(ArgumentError, /as requires an Arel node/)
+    end
+
+    it 'converts symbol alias to string' do
+      expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+        SELECT count() AS total FROM `test_table`
+      SQL
+
+      aliased = builder.as(builder.count, :total)
+
+      expect(builder.select(aliased).to_sql).to eq(expected_sql)
     end
   end
 end
