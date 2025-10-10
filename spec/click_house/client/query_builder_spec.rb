@@ -331,6 +331,19 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
 
         expect(result.to_sql).to eq(expected_sql)
       end
+
+      it 'generates redacted_sql for subqueries in IN clause' do
+        subquery = described_class.new('foreign_table').select(:id).where(active: true)
+        result = builder.where(id: 1).where(foreign_key: subquery)
+
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          WHERE `test_table`.`id` = $1 AND `test_table`.`foreign_key` IN
+          (SELECT `foreign_table`.`id` FROM `foreign_table` WHERE  `foreign_table`.`active` = $2)
+        SQL
+
+        expect(result.to_redacted_sql).to eq(expected_sql)
+      end
     end
 
     context 'with string pattern matching' do
