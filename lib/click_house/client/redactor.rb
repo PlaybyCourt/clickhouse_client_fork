@@ -35,7 +35,11 @@ module ClickHouse
         def redact_constraint(constraint, bind_manager)
           case constraint
           when Arel::Nodes::In
-            constraint.left.in(Array.new(constraint.right.size) { Arel.sql(bind_manager.next_bind_str) })
+            if constraint.right.is_a? Arel::Nodes::SelectStatement
+              constraint.left.in(redact_select_statement(constraint.right, bind_manager))
+            else
+              constraint.left.in(Array.new(constraint.right.size) { Arel.sql(bind_manager.next_bind_str) })
+            end
           when Arel::Nodes::Equality
             constraint.left.eq(Arel.sql(bind_manager.next_bind_str))
           when Arel::Nodes::LessThan
@@ -67,6 +71,19 @@ module ClickHouse
           end
 
           redacted_constraint
+        end
+
+        def redact_select_statement(select_statement, bind_manager)
+          cloned_statement = select_statement.clone
+          cloned_statement.cores.map! do |select_core|
+            select_core.wheres = select_core.wheres.map do |where|
+              redact_constraint(where, bind_manager)
+            end
+
+            select_core
+          end
+
+          cloned_statement
         end
       end
     end
