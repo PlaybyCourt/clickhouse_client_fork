@@ -52,6 +52,8 @@ module ClickHouse
             constraint.left.gteq(Arel.sql(bind_manager.next_bind_str))
           when Arel::Nodes::NamedFunction
             redact_named_function(constraint, bind_manager)
+          when Arel::Nodes::Matches
+            constraint.left.matches(Arel.sql(bind_manager.next_bind_str), constraint.escape, constraint.case_sensitive)
           else
             raise ArgumentError, "Unsupported Arel node type for Redactor: #{constraint.class}"
           end
