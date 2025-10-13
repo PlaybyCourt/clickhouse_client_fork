@@ -425,6 +425,15 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
 
         expect(sql).to eq(expected_sql)
       end
+
+      it 'builds redacted SQL with pattern matching' do
+        expected_sql = <<~SQL.squish.lines(chomp: true).join(' ')
+          SELECT * FROM `test_table`
+          WHERE `test_table`.`column1` ILIKE $1
+        SQL
+
+        expect(builder.where(builder.table[:column1].matches('value%')).to_redacted_sql).to eq(expected_sql)
+      end
     end
 
     include_examples 'VALID_NODES test', :where
