@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - '*'
+  pull_request:
+
+jobs:
+  rspec:
+    name: RSpec (Rails ${{ matrix.rails }} / Ruby ${{ matrix.ruby }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ruby: '3.1'
+            rails: '6.1'
+          - ruby: '3.1'
+            rails: '7.2'
+          - ruby: '3.2'
+            rails: '7.2'
+          - ruby: '3.3'
+            rails: '7.2'
+          - ruby: '3.2'
+            rails: '8.0'
+          - ruby: '3.3'
+            rails: '8.0'
+    env:
+      BUNDLE_GEMFILE: gemfiles/Gemfile-rails-${{ matrix.rails }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      - run: bundle config set --local path vendor/bundle
+      - name: Run RSpec
+        run: bundle exec rspec
+
+  rubocop:
+    name: Rubocop (Rails ${{ matrix.rails }} / Ruby ${{ matrix.ruby }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ruby: '3.1'
+            rails: '6.1'
+          - ruby: '3.1'
+            rails: '7.2'
+          - ruby: '3.2'
+            rails: '7.2'
+          - ruby: '3.3'
+            rails: '7.2'
+          - ruby: '3.2'
+            rails: '8.0'
+          - ruby: '3.3'
+            rails: '8.0'
+    env:
+      BUNDLE_GEMFILE: gemfiles/Gemfile-rails-${{ matrix.rails }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      - run: bundle config set --local path vendor/bundle
+      - name: Run Rubocop
+        run: bundle exec rubocop -P -E .

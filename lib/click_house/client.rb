@@ -2,6 +2,7 @@
 
 require 'addressable'
 require 'json'
+require 'logger'
 require 'active_support/deprecation'
 require 'active_support/time'
 require 'active_support/notifications'
