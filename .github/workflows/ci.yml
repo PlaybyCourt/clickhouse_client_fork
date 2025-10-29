@@ -35,8 +35,9 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby }}
-          bundler-cache: true
+          bundler-cache: false
       - run: bundle config set --local path vendor/bundle
+      - run: bundle install --jobs 4 --retry 3
       - name: Run RSpec
         run: bundle exec rspec
 
@@ -66,7 +67,8 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby }}
-          bundler-cache: true
+          bundler-cache: false
       - run: bundle config set --local path vendor/bundle
+      - run: bundle install --jobs 4 --retry 3
       - name: Run Rubocop
         run: bundle exec rubocop -P -E .
