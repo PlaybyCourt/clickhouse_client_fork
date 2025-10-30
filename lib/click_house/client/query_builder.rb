@@ -5,7 +5,7 @@ require 'active_record'
 module ClickHouse
   module Client
     class QueryBuilder < QueryLike
-      attr_reader :table
+      attr_reader :table, :table_name, :database
       attr_accessor :manager
 
       VALID_NODES = [
@@ -28,15 +28,23 @@ module ClickHouse
         Arel::Nodes::Multiplication,
         Arel::Nodes::As
       ].freeze
+      AREL_ENGINE = ClickHouse::Client::ArelEngine.new
 
-      def initialize(table_name)
-        @table = Arel::Table.new(table_name)
-        @manager = Arel::SelectManager.new(Arel::Table.engine).from(@table).project(Arel.star)
+      def initialize(table_name, database: nil)
+        @table_name = table_name.to_s
+        @database = database&.to_s
+        @table = Arel::Table.new(@table_name)
+
+        from_source = build_from_source(@table)
+        @manager = Arel::SelectManager.new(Arel::Table.engine).from(from_source).project(Arel.star)
       end
 
       def initialize_copy(other)
         super
 
+        @table_name = other.table_name
+        @database = other.database
+        @table = other.table
         @manager = other.manager.clone
       end
 
@@ -339,6 +347,17 @@ module ClickHouse
         return unless constraint.is_a?(Arel::Nodes::Node) && VALID_NODES.exclude?(constraint.class)
 
         raise ArgumentError, "Unsupported Arel node type for QueryBuilder: #{constraint.class.name}"
+      end
+
+      def build_from_source(table)
+        return table unless database
+
+        qualified = "#{quote_identifier(database)}.#{quote_identifier(table_name)}"
+        Arel::Nodes::TableAlias.new(Arel.sql(qualified), table_name)
+      end
+
+      def quote_identifier(name)
+        AREL_ENGINE.quote_table_name(name.to_s)
       end
 
       def apply_constraints(instance, constraints, clause_type)
