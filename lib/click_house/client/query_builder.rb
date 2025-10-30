@@ -314,7 +314,7 @@ module ClickHouse
       end
 
       def to_sql
-        visitor = ClickHouse::Client::ArelVisitor.new(ClickHouse::Client::ArelEngine.new)
+        visitor = ClickHouse::Client::ArelVisitor.new(AREL_ENGINE)
         visitor.accept(manager.ast, Arel::Collectors::SQLString.new).value
       end
 
