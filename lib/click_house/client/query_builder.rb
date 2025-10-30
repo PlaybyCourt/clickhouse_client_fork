@@ -41,6 +41,8 @@ module ClickHouse
       def initialize_copy(other)
         super
 
+        @table = other.table.dup
+        @database = other.database
         @manager = other.manager.clone
       end
 
