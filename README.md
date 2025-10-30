@@ -63,7 +63,7 @@ puts ClickHouse::Client.execute('DROP TABLE IF EXISTS t1', :main)
 
 ## ClickHouse::Client::QueryBuilder
 
-The QueryBuilder provides an ActiveRecord-like interface for constructing ClickHouse queries programmatically. While similar to ActiveRecord's query interface, it has been tailored specifically for ClickHouse's SQL dialect and features.
+The QueryBuilder provides an ActiveRecord-like interface for constructing ClickHouse queries programmatically. While similar to ActiveRecord's query interface, it has been tailored specifically for ClickHouse's SQL dialect and features. Pass an optional `database:` keyword when you need to query a ClickHouse schema different from the one configured on the current connection.
 
 ### Basic Usage
 
@@ -74,6 +74,11 @@ query = ClickHouse::Client::QueryBuilder.new('users')
 # Build and execute queries
 query.select(:id, :name).where(active: true).to_sql
 # => "SELECT `users`.`id`, `users`.`name` FROM `users` WHERE `users`.`active` = 'true'"
+
+# Query a different database explicitly
+dict_query = ClickHouse::Client::QueryBuilder.new('dict_facilities', database: 'default')
+dict_query.select(:facility_id).limit(5).to_sql
+# => "SELECT `dict_facilities`.`facility_id` FROM `default`.`dict_facilities` `dict_facilities` LIMIT 5"
 ```
 
 ### WHERE Clause

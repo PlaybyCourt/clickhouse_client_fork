@@ -5,7 +5,7 @@ require 'active_record'
 module ClickHouse
   module Client
     class QueryBuilder < QueryLike
-      attr_reader :table
+      attr_reader :table, :database
       attr_accessor :manager
 
       VALID_NODES = [
@@ -28,15 +28,21 @@ module ClickHouse
         Arel::Nodes::Multiplication,
         Arel::Nodes::As
       ].freeze
+      AREL_ENGINE = ClickHouse::Client::ArelEngine.new
 
-      def initialize(table_name)
-        @table = Arel::Table.new(table_name)
-        @manager = Arel::SelectManager.new(Arel::Table.engine).from(@table).project(Arel.star)
+      def initialize(table_name, database: nil)
+        @database = database&.to_s
+        @table = Arel::Table.new(table_name.to_s)
+
+        from_source = build_from_source(@table)
+        @manager = Arel::SelectManager.new(Arel::Table.engine).from(from_source).project(Arel.star)
       end
 
       def initialize_copy(other)
         super
 
+        @table = other.table.dup
+        @database = other.database
         @manager = other.manager.clone
       end
 
@@ -310,7 +316,7 @@ module ClickHouse
       end
 
       def to_sql
-        visitor = ClickHouse::Client::ArelVisitor.new(ClickHouse::Client::ArelEngine.new)
+        visitor = ClickHouse::Client::ArelVisitor.new(AREL_ENGINE)
         visitor.accept(manager.ast, Arel::Collectors::SQLString.new).value
       end
 
@@ -339,6 +345,20 @@ module ClickHouse
         return unless constraint.is_a?(Arel::Nodes::Node) && VALID_NODES.exclude?(constraint.class)
 
         raise ArgumentError, "Unsupported Arel node type for QueryBuilder: #{constraint.class.name}"
+      end
+
+      # Builds the FROM source node. When a database override is provided we
+      # render a qualified identifier (`database`.`table`) while preserving the
+      # original table alias so projections keep using the unqualified name.
+      def build_from_source(table)
+        return table unless database
+
+        qualified = "#{quote_identifier(database)}.#{quote_identifier(table.name)}"
+        Arel::Nodes::TableAlias.new(Arel.sql(qualified), table.name)
+      end
+
+      def quote_identifier(name)
+        AREL_ENGINE.quote_table_name(name.to_s)
       end
 
       def apply_constraints(instance, constraints, clause_type)

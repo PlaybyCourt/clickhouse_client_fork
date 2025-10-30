@@ -42,6 +42,13 @@ RSpec.describe ClickHouse::Client::QueryBuilder do
     it 'initializes with correct table' do
       expect(builder.table.name).to eq(table_name.to_s)
     end
+
+    it 'accepts a database and qualifies the FROM clause' do
+      qualified_builder = described_class.new(:dict_facilities, database: 'default')
+
+      expect(qualified_builder.database).to eq('default')
+      expect(qualified_builder.to_sql).to eq('SELECT * FROM `default`.`dict_facilities` `dict_facilities`')
+    end
   end
 
   describe '#where' do
