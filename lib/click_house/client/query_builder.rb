@@ -5,7 +5,7 @@ require 'active_record'
 module ClickHouse
   module Client
     class QueryBuilder < QueryLike
-      attr_reader :table, :table_name, :database
+      attr_reader :table, :database
       attr_accessor :manager
 
       VALID_NODES = [
@@ -31,9 +31,8 @@ module ClickHouse
       AREL_ENGINE = ClickHouse::Client::ArelEngine.new
 
       def initialize(table_name, database: nil)
-        @table_name = table_name.to_s
         @database = database&.to_s
-        @table = Arel::Table.new(@table_name)
+        @table = Arel::Table.new(table_name.to_s)
 
         from_source = build_from_source(@table)
         @manager = Arel::SelectManager.new(Arel::Table.engine).from(from_source).project(Arel.star)
@@ -42,9 +41,6 @@ module ClickHouse
       def initialize_copy(other)
         super
 
-        @table_name = other.table_name
-        @database = other.database
-        @table = other.table
         @manager = other.manager.clone
       end
 
@@ -349,11 +345,14 @@ module ClickHouse
         raise ArgumentError, "Unsupported Arel node type for QueryBuilder: #{constraint.class.name}"
       end
 
+      # Builds the FROM source node. When a database override is provided we
+      # render a qualified identifier (`database`.`table`) while preserving the
+      # original table alias so projections keep using the unqualified name.
       def build_from_source(table)
         return table unless database
 
-        qualified = "#{quote_identifier(database)}.#{quote_identifier(table_name)}"
-        Arel::Nodes::TableAlias.new(Arel.sql(qualified), table_name)
+        qualified = "#{quote_identifier(database)}.#{quote_identifier(table.name)}"
+        Arel::Nodes::TableAlias.new(Arel.sql(qualified), table.name)
       end
 
       def quote_identifier(name)
